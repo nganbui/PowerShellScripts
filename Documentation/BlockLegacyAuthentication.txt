@@ -1,0 +1,6 @@
+https://www.michev.info/Blog/Post/2130/blocking-legacy-authentication-in-office-365
+https://tech.xenit.se/discover-users-running-legacy-authentication-and-why-you-need-to-disable-it/
+https://mattchatt.co.za/block-legacy-authentication-in-office-365/
+https://docs.microsoft.com/en-us/azure/active-directory/conditional-access/block-legacy-authentication
+https://medium.com/@jobsonsandrade/https-medium-com-jobsonsandrade-blockinglegacyauthn-9518025439d1
+https://www.codetwo.com/userguide/backup/troubleshooting-sharepoint.htm
