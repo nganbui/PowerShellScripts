@@ -5,7 +5,7 @@
         [hashtable]$AuthToken,                 
         [ValidateSet('beta', 'v1.0')] #Graph API version
         [string]$ApiVersion = 'v1.0',        
-        [parameter(Mandatory = $false, parameterSetName = "UserType")]
+        [parameter(Mandatory = $false)]
         [ValidateSet('Member','Guest')] 
         [String]$UserType,
         #specifies which properties of the user object should be returned
@@ -29,6 +29,7 @@
     }
     process {
         Write-Progress -Activity 'Getting list of users'
+        $objectCollection = @()
         <#$Uri = "https://graph.microsoft.com/$($ApiVersion)/users?`$select=id,businessPhones,displayName,givenName,jobTitle,mail,mobilePhone,officeLocation,
                                                             preferredLanguage,surname,userPrincipalName,employeeId,isResourceAccount,lastPasswordChangeDateTime,
                                                             officeLocation,onPremisesDomainName,onPremisesLastSyncDateTime,proxyAddresses,userType,accountEnabled,
@@ -46,31 +47,43 @@
              $Uri = $Uri + "&`$filter=userType eq '$($UserType)'"
         }   
         $Uri = $Uri + "&`$top=999"        
-        try {
-            $objectCollection = @()   
-            $Results = Invoke-NIHGraph -Method "Get" -URI $Uri -Headers $Header
-            if ($Results.value) {
-                $objectCollection = $Results.value
-                $NextLink = $Results.'@odata.nextLink'
-                while ($null -ne $NextLink) {        
-                    $Results = (Invoke-NIHGraph -Method "Get" -Uri $NextLink -Headers $Header)
+        
+        $retryCount = 5
+        $retryAttempts = 0
+        $backOffInterval = 2
+
+        while ($retryAttempts -le $retryCount) {
+            try {
+                $Results = Invoke-NIHGraph -Method "Get" -URI $Uri -Headers $Header
+                if ($Results.value) {
+                    $objectCollection = $Results.value
                     $NextLink = $Results.'@odata.nextLink'
-                    $objectCollection += $Results.value
-                }     
-            } 
-            else {
-                $objectCollection = $Results
-            }             
-        }
-        catch {
-            if ($_.exception.response.statuscode.value__ -eq 404) {
+                    while ($null -ne $NextLink) {        
+                        $Results = (Invoke-NIHGraph -Method "Get" -Uri $NextLink -Headers $Header)
+                        $NextLink = $Results.'@odata.nextLink'
+                        $objectCollection += $Results.value
+                    }     
+                } 
+                else {
+                    $objectCollection = $Results
+                }                          
+                $retryAttempts = $retryCount + 1
                 Write-Progress -Activity 'Getting list of users' -Completed
-                Write-Warning -Message "Not found error while getting Getting list of users" ; return
+                return $objectCollection
+                
             }
-            else { throw $_ ; return }
+            catch {
+                if ($retryAttempts -lt $retryCount) {
+                    $retryAttempts = $retryAttempts + 1        
+                    Write-Host "Retry attempt number: $retryAttempts. Sleeping for $backOffInterval seconds..."
+                    Start-Sleep $backOffInterval
+                    $backOffInterval = $backOffInterval * 2
+                }
+                else {
+                    Write-Verbose -Message 'Unable to getting M365 Users' -Verbose 
+                }
+            }
         }
-        Write-Progress -Activity 'Getting list of users' -Completed
-        $objectCollection
     }
 }
 function Get-NIHDeletedO365Users {
@@ -98,22 +111,44 @@ function Get-NIHDeletedO365Users {
                                                             onPremisesSamAccountName,onPremisesSecurityIdentifier,onPremisesSyncEnabled,onPremisesUserPrincipalName,
                                                             passwordPolicies,streetAddress,state,country,postalCode,deletedDateTime,externalUserState,externalUserStateChangeDateTime,
                                                             mailNickname,otherMails,showInAddressList,signInActivity&`$top=999"
-        $Results = Invoke-NIHGraph -Method "Get" -URI $Uri -Headers $Header 
-        if ($Results.value) {
-            $objectCollection = $Results.value
-            $NextLink = $Results.'@odata.nextLink'
-            while ($null -ne $NextLink) {        
-                $Results = (Invoke-NIHGraph -Method "Get" -Uri $NextLink -Headers $Header)
-                $NextLink = $Results.'@odata.nextLink'
-                $objectCollection += $Results.value
-            }     
-        } 
-        else {
-            $objectCollection = $Results
-        }
-        Write-progress -Activity "Finding Deleted Users" -Completed
-        return $objectCollection
+        
 
+        $retryCount = 5
+        $retryAttempts = 0
+        $backOffInterval = 2
+
+        while ($retryAttempts -le $retryCount) {
+            try {
+                $Results = Invoke-NIHGraph -Method "Get" -URI $Uri -Headers $Header 
+                if ($Results.value) {
+                    $objectCollection = $Results.value
+                    $NextLink = $Results.'@odata.nextLink'
+                    while ($null -ne $NextLink) {        
+                        $Results = (Invoke-NIHGraph -Method "Get" -Uri $NextLink -Headers $Header)
+                        $NextLink = $Results.'@odata.nextLink'
+                        $objectCollection += $Results.value
+                    }     
+                } 
+                else {
+                    $objectCollection = $Results
+                }                          
+                $retryAttempts = $retryCount + 1
+                Write-Progress -Activity 'Finding Deleted Users' -Completed
+                return $objectCollection
+                
+            }
+            catch {
+                if ($retryAttempts -lt $retryCount) {
+                    $retryAttempts = $retryAttempts + 1        
+                    Write-Host "Retry attempt number: $retryAttempts. Sleeping for $backOffInterval seconds..."
+                    Start-Sleep $backOffInterval
+                    $backOffInterval = $backOffInterval * 2
+                }
+                else {
+                    Write-Verbose -Message 'Unable to getting M365 Users' -Verbose 
+                }
+            }
+        }
     }
 }
 function Get-NIHO365GuestUsers {
@@ -179,7 +214,7 @@ function Get-NIHO365User {
             "passwordProfile", "pastProjects", "postalCode", "preferredDataLocation", "preferredLanguage", "preferredName",
             "provisionedPlans", "proxyAddresses", "responsibilities", "schools", "skills", "state", "streetAddress",
             "surname", "usageLocation", "userPrincipalName", "userType","signInActivity")]
-        [String[]]$Select
+        [String[]]$Select="id,userPrincipalName,accountEnabled,displayName,department,mail,createdDateTime,assignedLicenses,assignedPlans"
     ) 
     begin {                
         if ($UserID) { $userID = "users/$userID" } else { $userid = "me" }
@@ -209,6 +244,60 @@ function Get-NIHO365User {
         $results
     }
 }
+function Get-NIHO365UserByEmail {
+    [cmdletBinding()]
+    param(
+        [parameter(Mandatory = $true)]
+        [hashtable]$AuthToken,                 
+        [ValidateSet('beta', 'v1.0')] #Graph API version
+        [string]$ApiVersion = 'v1.0',        
+        [parameter(Mandatory = $true)]
+        [string]$EmailAddress,
+        #specifies which properties of the user object should be returned
+        [parameter(Mandatory = $false, parameterSetName = "Select")]
+        [ValidateSet  ("aboutMe", "accountEnabled", "ageGroup", "assignedLicenses", "assignedPlans", "birthday", "businessPhones",
+            "city", "companyName", "consentProvidedForMinor", "country", "createdDateTime", "department", "displayName", "givenName",
+            "hireDate", "id", "imAddresses", "interests", "jobTitle", "legalAgeGroupClassification", "mail", "mailboxSettings",
+            "mailNickname", "mobilePhone", "mySite", "officeLocation", "onPremisesDomainName", "onPremisesExtensionAttributes",
+            "onPremisesImmutableId", "onPremisesLastSyncDateTime", "onPremisesProvisioningErrors", "onPremisesSamAccountName",
+            "onPremisesSecurityIdentifier", "onPremisesSyncEnabled", "onPremisesUserPrincipalName", "passwordPolicies",
+            "passwordProfile", "pastProjects", "postalCode", "preferredDataLocation", "preferredLanguage", "preferredName",
+            "provisionedPlans", "proxyAddresses", "responsibilities", "schools", "skills", "state", "streetAddress",
+            "surname", "usageLocation", "userPrincipalName", "userType","signInActivity")]
+        [String[]]$Select = "id,mail,userPrincipalName,displayName,department"
+    ) 
+    begin {        
+        # Create header
+        $Header = @{       
+            Authorization = $AuthToken['Authorization']
+        } 
+    }
+    process {
+        Write-Progress -Activity 'Getting user information from email address'
+        $uri = "https://graph.microsoft.com/$ApiVersion/users?`$filter=mail eq '$EmailAddress'"; 
+        
+        if ($Select) { 
+            $uri = $uri + '&$select=' + ($Select -join ",") 
+        }
+        try {
+            $results = Invoke-NIHGraph -Method "Get" -URI $Uri -Headers $Header
+            $userInfo = @($results.value)
+            if ($userInfo -and $userInfo.Count -gt 0) {
+                $results = $userInfo[0]
+            }
+                         
+        }
+        catch {
+            if ($_.exception.response.statuscode.value__ -eq 404) {
+                Write-Progress -Activity 'Getting user information' -Completed
+                Write-Warning -Message "Not found error while getting data for user '$userid'" ; return
+            }
+            else { throw $_ ; return }
+        }
+        Write-Progress -Activity 'Getting user information from email address' -Completed
+        $userInfo
+    }
+}
 function Get-NIHLicenses{    
     [cmdletBinding()]
     param(
@@ -225,33 +314,45 @@ function Get-NIHLicenses{
     }
     process {
         Write-Progress -Activity 'Getting licenses'
+        $objectCollection = @()
         $Uri = "https://graph.microsoft.com/$($ApiVersion)/subscribedSkus"; 
 
-        try {
-            $objectCollection = @()   
-            $Results = Invoke-NIHGraph -Method "Get" -URI $Uri -Headers $Header
-            if ($Results.value) {
-                $objectCollection = $Results.value
-                $NextLink = $Results.'@odata.nextLink'
-                while ($null -ne $NextLink) {        
-                    $Results = (Invoke-NIHGraph -Method "Get" -Uri $NextLink -Headers $Header)
+        $retryCount = 5
+        $retryAttempts = 0
+        $backOffInterval = 2
+
+        while ($retryAttempts -le $retryCount) {
+            try {
+                $Results = Invoke-NIHGraph -Method "Get" -URI $Uri -Headers $Header
+                if ($Results.value) {
+                    $objectCollection = $Results.value
                     $NextLink = $Results.'@odata.nextLink'
-                    $objectCollection += $Results.value
-                }     
-            } 
-            else {
-                $objectCollection = $Results
-            }             
-        }
-        catch {
-            if ($_.exception.response.statuscode.value__ -eq 404) {
+                    while ($null -ne $NextLink) {        
+                        $Results = (Invoke-NIHGraph -Method "Get" -Uri $NextLink -Headers $Header)
+                        $NextLink = $Results.'@odata.nextLink'
+                        $objectCollection += $Results.value
+                    }     
+                } 
+                else {
+                    $objectCollection = $Results
+                }                           
+                $retryAttempts = $retryCount + 1
                 Write-Progress -Activity 'Getting licenses' -Completed
-                Write-Warning -Message "Error while getting licenses" ; return
+                return $objectCollection
+                
             }
-            else { throw $_ ; return }
+            catch {
+                if ($retryAttempts -lt $retryCount) {
+                    $retryAttempts = $retryAttempts + 1        
+                    Write-Host "Retry attempt number: $retryAttempts. Sleeping for $backOffInterval seconds..."
+                    Start-Sleep $backOffInterval
+                    $backOffInterval = $backOffInterval * 2
+                }
+                else {
+                    Write-Verbose -Message 'Unable to getting licenses' -Verbose 
+                }
+            }
         }
-        Write-Progress -Activity 'Getting licenses' -Completed
-        $objectCollection
     }
 }
 function Get-NIHLicensesByUser{    
@@ -622,6 +723,48 @@ function Get-NIHO365UserRelevant {
     # }
 
 }
+
+#region Get groups and directory roles that the user is a direct member of.
+function Get-NIHO365UserIsMemberOfGroups{
+    [cmdletBinding()]
+    param(
+        [parameter(Mandatory = $true)]
+        [hashtable]$AuthToken,                 
+        [ValidateSet('beta', 'v1.0')] #Graph API version
+        [string]$ApiVersion = 'v1.0',
+         #UserID as a guid or User Principal name. If not specified defaults to "me"
+        [parameter(Mandatory = $true)]
+        [string]$UserID
+    )    
+    begin {        
+        # Create header
+        $Header = @{       
+            Authorization = $AuthToken['Authorization']
+        }
+        $resource = "https://graph.microsoft.com"
+    }
+    process {
+        Write-progress -Activity "Getting Groups that $UserID is member of..."
+        $objectCollection = @()
+        $Uri = "$resource/$ApiVersion/users/$UserID/memberOf/microsoft.graph.group?`$top=999"
+        $Results = Invoke-NIHGraph -Method "Get" -URI $Uri -Headers $Header 
+        
+        $objectCollection = $Results.value
+        $NextLink = $Results.'@odata.nextLink'
+
+        while ($NextLink) {        
+                $Results = (Invoke-NIHGraph -Method "Get" -Uri $NextLink -Headers $Header)
+                $NextLink = $Results.'@odata.nextLink'
+                $objectCollection += $Results.value
+            } 
+        Write-progress -Activity "Getting Groups that user is member of" -Completed
+        
+    }
+    end{
+        return $objectCollection
+    }
+}
+#endregion
 
 function Get-NIHO365UserOneDrive {
     [cmdletBinding()]

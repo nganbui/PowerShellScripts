@@ -366,18 +366,26 @@ function Invoke-NIHGraph {
             try{
                 $RestResults = Invoke-RestMethod -Method $Method -Uri $URI -Headers $Headers -ContentType "application/json" -Body $Body -Verbose
             }
-            catch{                                            
-                #$RestResults = $_.Exception
-                $RestResults = $_
-            }
+            catch{
+                $ResponseResult = $_.Exception.Response.GetResponseStream()
+                $ResponseReader = New-Object System.IO.StreamReader($ResponseResult)
+                $ResponseBody = $ResponseReader.ReadToEnd()
+                $RestResults = $ResponseBody
+            }            
         }
         else {            
             try{                
                 $RestResults = Invoke-RestMethod -Method $Method -Uri $URI -Headers $Headers -ContentType "application/json" -Verbose
             }
-            catch{                
+            <#catch{                
                 #$RestResults = $_.Exception
                 $RestResults = $_
+            }#>
+            catch{
+                $ResponseResult = $_.Exception.Response.GetResponseStream()
+                $ResponseReader = New-Object System.IO.StreamReader($ResponseResult)
+                $ResponseBody = $ResponseReader.ReadToEnd()
+                $RestResults = $ResponseBody
             }
         }
     <#try {
