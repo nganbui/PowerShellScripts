@@ -17,7 +17,7 @@
         #Retrieve Active SPO Sites
         LogWrite -Message "Retrieving Active SPO Sites from M365..."
         #--this cmd only get basic site info        
-        $sites = Get-PnPTenantSite -Filter "Url -notlike '-my.sharepoint.com'" | select * | Select-Object *           
+        $sites = Get-PnPTenantSite -Filter "Url -notlike '-my.sharepoint.com'" | select *        
         $script:sitesData = ParseSPOSites -SitesType Sites -sitesObj $sites -ObjectState Active -ParseObjType O365
         #--get extended site props such as:CreatedDate,OwnerEmail,WebsCount,Hub,SharingCapability      
         UpdateSitesProperties -SiteObjects $script:sitesData -SitesType Sites
@@ -60,12 +60,18 @@ Function GetAllSPOSites {
     }
     try {
         $retrivalStartTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-       
+        <#
+            $_.AbsoluteUrl
+            $appCatalog = Get-PnPSiteCollectionAppCatalogs
+            $appCatalog.Count
+        #>
+        LogWrite -Message "Retrieving site collection scoped app catalogs..."
+        $script:appCatalogSites = AppCatalogSites -Connection $SPOAdminConnection
         #region SPO Sites
         #Retrieve Active SPO Sites
         LogWrite -Message "Retrieving Active SPO Sites from M365..."
         #--this cmd only get basic site info        
-        $sites = Get-PnPTenantSite -Filter "Url -notlike '-my.sharepoint.com'" | select * | Select-Object *           
+        $sites = Get-PnPTenantSite -Filter "Url -notlike '-my.sharepoint.com'" | select *      
         $script:sitesData = ParseSPOSites -SitesType Sites -sitesObj $sites -ObjectState Active -ParseObjType O365       
         #Retrieve Soft Deleted SPO Sites
         LogWrite -Message "Retrieving Soft Deleted SPO Sites from M365..."
@@ -81,7 +87,8 @@ Function GetAllSPOSites {
     }
     catch {
         LogWrite -Level ERROR -Message "An error occured $($_.Exception)"        
-    }       
+    }
+        
 }
 
 Function GetAllPersonalSites {
@@ -102,7 +109,7 @@ Function GetAllPersonalSites {
         #region Personal Sites
         #Retrieve Active Personal Sites
         LogWrite -Message "Retrieving Active Personal Sites from M365..."        
-        $sites = Get-PnPTenantSite -IncludeOneDriveSites -Filter "Url -like '-my.sharepoint.com/personal/'" | select *        
+        $sites = Get-PnPTenantSite -IncludeOneDriveSites -Filter "Url -like '-my.sharepoint.com/personal/' -and Status -eq 'Active' -and LockState -eq 'Unlock'" | select *        
         $script:personalSitesData = ParseSPOSites -sitesObj $sites -SitesType PersonalSites -ObjectState Active -ParseObjType O365
         #--For personal will get extended site props Weekly due to perfomance issue
         #UpdateSitesProperties -SiteObjects $script:personalSitesData -SitesType PersonalSites
@@ -140,6 +147,7 @@ Function ParseSPOSites {
     }
 
     foreach ($siteObj in $sitesObj) {        
+        $siteUrl = $siteObj.Url
         #Initailize objects with Null value
         $TemplateID, $PrimarySCA, $StorageQuota, $StorageUsed, $StorageWarningLevel, $ResourceUsage, $ResourceWarningLevel, $NumberOfSubSites, $IsAuditEnabled = $null        
 
@@ -149,6 +157,11 @@ Function ParseSPOSites {
         else {
             $isAuditEnabled = 0
         }
+        $AppCatalogEnabled = "Disabled"
+        $scopeAppCatalog = LookupM365Sku -Skus $script:appCatalogSites -Sku $siteUrl
+        if ($siteUrl -eq $scopeAppCatalog){
+            $AppCatalogEnabled = "Enabled"
+        }
         # Get SPO Site Usage        
         # $siteUsage = $script:siteUsage | ? { $_.'Site Url' -eq $siteObj.Url } | Select *
 
@@ -157,11 +170,13 @@ Function ParseSPOSites {
         switch ($ParseObjType) {
             "O365" {
                 $TemplateID = $siteObj.Template      
-                $PrimarySCA = $siteObj.Owner  
-                $StorageQuota = ($siteObj.StorageMaximumLevel) / 1024
-                $StorageUsed = ($siteObj.StorageUsage) / 1024
-                $StorageWarningLevel = ($siteObj.StorageWarningLevel) / 1024
-                $ResourceUsage = $siteObj.CurrentResourceUsage
+                $PrimarySCA = $siteObj.Owner 
+                $SecondarySCA = ""
+                $Created = ""
+                $StorageQuota = ($siteObj.StorageQuota) / 1024
+                $StorageUsed = ($siteObj.StorageUsageCurrent) / 1024
+                $StorageWarningLevel = ($siteObj.StorageQuotaWarningLevel) / 1024
+                #$ResourceUsage = $siteObj.CurrentResourceUsage
                 #$ResourceWarningLevel = $siteObj.ResourceQuotaWarningLevel
                 $NumberOfSubSites = $siteObj.WebsCount
                 $GroupId          = $siteObj.GroupId;
@@ -177,6 +192,8 @@ Function ParseSPOSites {
             "DB" {
                 $TemplateID = $siteObj.TemplateID
                 $PrimarySCA = $siteObj.PrimarySCA
+                $SecondarySCA = $siteObj.SecondarySCA
+                $Created = $siteObj.Created
                 $StorageQuota = $siteObj.StorageQuota
                 $StorageUsed = $siteObj.StorageUsed
                 $StorageWarningLevel = $siteObj.StorageWarningLevel
@@ -184,14 +201,16 @@ Function ParseSPOSites {
                 $ResourceWarningLevel = $siteObj.ResourceWarningLevel
                 $NumberOfSubSites = $siteObj.NumberOfSubSites
                 $FilesCount = $siteObj.FilesCount
-                $skipStorage = $siteObj.SkipAutoStorage               
+                $skipStorage = $siteObj.SkipAutoStorage 
+                $GroupId          = $siteObj.O365GroupID
+                $RelatedGroupId   = $siteObj.RelatedGroupId              
                 
             }
         }
         $sitesFormattedData += [pscustomobject]@{
             SiteType                            = $SitesType
             SiteName                            = $siteObj.Title
-            URL                                 = $siteObj.Url
+            URL                                 = $siteUrl
             Description                         = $Description
             TemplateID                          = $TemplateID
             GroupId                             = $GroupId
@@ -201,14 +220,14 @@ Function ParseSPOSites {
             siteStatus                          = $siteStatus
             LockState                           = $siteObj.LockState
             PrimarySCA                          = $PrimarySCA
-            SecondarySCA                        = ""
+            SecondarySCA                        = $SecondarySCA
             SharingCapability                   = $siteObj.SharingCapability
             SiteDefinedSharingCapability        = $siteObj.SiteDefinedSharingCapability
             SharingDomainRestrictionMode        = $siteObj.SharingDomainRestrictionMode
             SharingAllowedDomainList            = $siteObj.SharingAllowedDomainList
             SharingBlockedDomainList            = $siteObj.SharingBlockedDomainList
             LastContentModifiedDate             = $siteObj.LastContentModifiedDate
-            Created                             = "";            
+            Created                             = $Created            
             DeletionTime                        = $siteObj.DeletionTime
             DaysRemaining                       = $siteObj.DaysRemaining
             Modified                            = "";            
@@ -218,6 +237,7 @@ Function ParseSPOSites {
             IsAuditEnabled                      = $isAuditEnabled
             AllowEditing                        = $siteObj.AllowEditing    
             DenyAddAndCustomizePages            = $siteObj.DenyAddAndCustomizePages
+            AppCatalogEnabled                   = $AppCatalogEnabled
             NumberOfSubSites                    = $NumberOfSubSites
             StorageQuota                        = $StorageQuota
             StorageUsed                         = $StorageUsed
@@ -249,7 +269,7 @@ Function ParseSPOSites {
     return $sitesFormattedData    
 }
 
-function UpdateSitesProperties {
+Function UpdateSitesProperties {
     param(
 		[parameter(Mandatory = $true)]
 		[ValidateNotNullOrEmpty()] 		
@@ -282,7 +302,7 @@ function UpdateSitesProperties {
                             $sitesObj.Description = $siteDetailed.Description
                             $sitesObj.NumberOfSubSites = $siteDetailed.WebsCount
                             $sitesObj.GroupId = $siteDetailed.GroupId
-                            if ($sitesObj.TemplateID -eq 'TEAMCHANNEL#0'){                                
+                            if ($sitesObj.TemplateID -match 'TEAMCHANNEL'){                                
                                 $sitesObj.RelatedGroupId = $siteDetailed.RelatedGroupId
                             }
                             $sitesObj.LastContentModifiedDate = ($siteDetailed.LastContentModifiedDate).toshortdatestring()
@@ -343,6 +363,25 @@ function UpdateSitesProperties {
     }
 }
 
+Function AppCatalogSites{
+    [cmdletBinding()]
+    param(
+        [parameter(Mandatory = $true)]
+        $Connection
+    )
+    [System.Collections.ArrayList]$appCatalogSites = @()
+    $appCatalog = Get-PnPSiteCollectionAppCatalogs
+    if ($appCatalog -and $appCatalog.Count -gt 0){
+        $appCatalog.ForEach({
+            $null = $appCatalogSites.Add([Ordered]@{
+                        $_.AbsoluteUrl = $_.AbsoluteUrl
+                    })
+            
+        })
+    }
+    return $appCatalogSites
+}
+
 Function CacheSPOSites {
     LogWrite -Level INFO -Message "Generating Cache files for SPO Sites starting..."
     if ($script:sitesData -ne $null) {
@@ -401,3 +440,96 @@ Function SyncPersonalSitesFromDBToCache{
         SetDataInCache -CacheData $deletedPersonalSitesInDB -CacheType DB -ObjectType PersonalSites -ObjectState InActive
     }
 }
+
+Function SyncSitesFromDBToCache{
+    LogWrite -Level INFO -Message "Syncing all DB SPO Sites to Cache"
+    $activeSitesInDB = @()
+    $deletedSitesInDB = @()
+
+    #Get Data from DB
+    $activeSitesInDB = GetSitesInDB -ConnectionString $script:ConnectionString -SitesType Sites -StatusType Active
+    $activeSitesInDB = $activeSitesInDB | ? { $_.SiteId -ne $null }
+    $deletedSitesInDB = GetSitesInDB -ConnectionString $script:ConnectionString -SitesType Sites -StatusType InActive
+    $deletedSitesInDB = $deletedSitesInDB | ? { $_.SiteId -ne $null }
+
+    #Parse DB Data
+    if ($null -ne $activeSitesInDB){
+        $activeSitesInDB = ParseSPOSites -sitesObj $activeSitesInDB -SitesType Sites -ParseObjType DB -ObjectState Active
+    }
+    if ($null -ne $deletedSitesInDB){
+        $deletedSitesInDB = ParseSPOSites -sitesObj $deletedSitesInDB -SitesType Sites -ObjectState InActive
+    }
+
+    #Cache DB Sites Data
+    if($null -ne $activeSitesInDB) {
+        SetDataInCache -CacheData $activeSitesInDB -CacheType DB -ObjectType SPOSites -ObjectState Active
+    }
+    
+    if($null -ne $deletedSitesInDB) {
+        SetDataInCache -CacheData $deletedSitesInDB -CacheType DB -ObjectType SPOSites -ObjectState InActive
+    }
+}
+
+#region Provisioning
+Function ParseSPOSite {
+    param($siteObj, 
+        $ICName,
+        $PrimarySCA,
+        $SecondarySCA,
+        $ExternalSharingEnabled
+    )
+    if ($siteObj) {
+        return [PSCustomObject][ordered]@{            
+            SiteType                            = "Sites";
+            ICName                              = $ICName
+            PrimarySCA                          = $PrimarySCA #$siteObj.OwnerEmail #$PrimarySCA
+            SecondarySCA                        = $SecondarySCA #$siteObj.SecondarySCA #$SecondarySCA
+            GroupId                             = $siteObj.GroupId;
+            SiteName                            = $siteObj.Title;
+            URL                                 = $siteObj.Url;
+            TemplateID                          = $siteObj.Template            
+            Status                              = $siteObj.Status;
+            siteStatus                          = $siteObj.Status;           
+            NumberOfSubSites                    = $siteObj.WebsCount
+            StorageQuota                        = ($siteObj.StorageQuota) / 1024
+            StorageUsed                         = ($siteObj.StorageUsageCurrent) / 1024
+            StorageWarningLevel                 = ($siteObj.StorageQuotaWarningLevel) / 1024
+            ResourceQuota                       = $siteObj.ResourceQuota; #Only Available on Get-SPOSite
+            ResourceUsage                       = $siteObj.ResourceUsageCurrent  #Only Available on Get-SPOSite
+            ResourceQuotaWarningLevel           = $siteObj.ResourceQuotaWarningLevel  #Only Available on Get-SPOSite
+            SharingCapability                   = $siteObj.SharingCapability;
+            LastContentModifiedDate             = $siteObj.LastContentModifiedDate;
+            HubSiteId                           = $siteObj.HubSiteId;
+            IsHubSite                           = $siteObj.IsHubSite;
+            LockState                           = $siteObj.LockState;
+            DenyAddAndCustomizePages            = $siteObj.DenyAddAndCustomizePages;
+            PWAEnabled                          = $siteObj.PWAEnabled;
+            SiteDefinedSharingCapability        = $siteObj.SiteDefinedSharingCapability;
+            ExternalSharingEnabled              = $ExternalSharingEnabled
+            SandboxedCodeActivationCapability   = $siteObj.SandboxedCodeActivationCapability;
+            DisableCompanyWideSharingLinks      = $siteObj.DisableCompanyWideSharingLinks;
+            DisableAppViews                     = $siteObj.DisableAppViews;
+            DisableFlows                        = $siteObj.DisableFlows;
+            SharingDomainRestrictionMode        = $siteObj.SharingDomainRestrictionMode;
+            SharingAllowedDomainList            = $siteObj.SharingAllowedDomainList;
+            SharingBlockedDomainList            = $siteObj.SharingBlockedDomainList;
+            ConditionalAccessPolicy             = $siteObj.ConditionalAccessPolicy;
+            AllowDownloadingNonWebViewableFiles = $siteObj.AllowDownloadingNonWebViewableFiles;
+            LimitedAccessFileType               = $siteObj.LimitedAccessFileType;
+            AllowEditing                        = $siteObj.AllowEditing;
+            CommentsOnSitePagesDisabled         = $siteObj.CommentsOnSitePagesDisabled;
+            DefaultSharingLinkType              = $siteObj.DefaultSharingLinkType;
+            DefaultLinkPermission               = $siteObj.DefaultLinkPermission;
+            DeletionTime                        = $siteObj.DeletionTime;
+            DaysRemaining                       = $siteObj.DaysRemaining;            
+            SkipAutoStorage                     = $siteObj.SkipAutoStorage
+            Description                         = $siteObj.Description;
+            Created                             = Get-Date
+            Modified                            = $siteObj.Modified;            
+            Operation                           = "";
+            OperationStatus                     = ""; 
+            AdditionalInfo                      = ""
+        }
+    }
+}
+#endregion

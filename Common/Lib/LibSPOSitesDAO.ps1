@@ -1,11 +1,19 @@
 ﻿Function UpdateSPOSitesToDatabase {
     $updateStartTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    
     #Update Active SPO Sites to Database...
     LogWrite -Message "Updating Active SPO Sites to Database..."    
     UpdateSQLSPOSites $script:connectionString $script:sitesData
+    
     #Update Soft Deleted Sites to Database...
     LogWrite -Message "Updating Soft Deleted SPO Sites to Database..."
     UpdateSQLSPOSites $script:connectionString $script:deletedSitesData
+    
+    #Remove permanently sites from Sites - DB
+    LogWrite -Message "Delete Permanently Deleted Sites from Database..."
+    $syncDate = Get-Date -format "yyyy-MM-dd"    
+    DeleteInvalidSites $script:connectionString $syncDate
+    
     $updateEndTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     LogWrite -Message "Update SPOSites To Database Start Time: $($updateStartTime)"
     LogWrite -Message "Update SPOSites To Database End Time: $($updateEndTime)"
@@ -34,7 +42,7 @@ Function UpdateSQLSPOSites {
             }
         }
         catch {
-            LogWrite -Level ERROR -Message "Error connecting to Database. Error info: $($_)"
+            LogWrite -Level ERROR -Message "Updating SPO sites issue: $($_)"
         }
         
         finally {            
@@ -50,7 +58,7 @@ Function UpdateSPOSiteRecord {
         # initialize stored procedure
         $SqlCmd = New-Object System.Data.SqlClient.SqlCommand
         $SqlCmd.CommandType = [System.Data.CommandType]'StoredProcedure'
-        $SqlCmd.CommandText = "SetSiteInfo_New"
+        $SqlCmd.CommandText = "SetSiteInfo"
         $SqlCmd.Connection = $SqlConnection
 
         # supply the name of the stored procedure
@@ -89,7 +97,16 @@ Function UpdateSPOSiteRecord {
         $param = $SqlCmd.Parameters.AddWithValue("Status", [string]$siteObj.Status)
         $param = $SqlCmd.Parameters.AddWithValue("SiteStatus", [string]$siteObj.siteStatus)
         $param = $SqlCmd.Parameters.AddWithValue("SharingCapability", [string]$siteObj.SharingCapability)
-        $param = $SqlCmd.Parameters.AddWithValue("LastContentModifiedDate", [string]$siteObj.LastContentModifiedDate)        
+
+        $SqlCmd.Parameters.AddWithValue("Created", $null)        
+        if ($siteObj.Created -ne '' -and $siteObj.Created -ne $null) {
+            $SqlCmd.Parameters["Created"].Value = [string]$siteObj.Created
+        }                
+        $SqlCmd.Parameters.AddWithValue("LastContentModifiedDate", $null)        
+        if ($siteObj.LastContentModifiedDate -ne '' -and $siteObj.LastContentModifiedDate -ne $null) {
+            $SqlCmd.Parameters["LastContentModifiedDate"].Value = [string]$siteObj.LastContentModifiedDate
+        }                
+
         $param = $SqlCmd.Parameters.AddWithValue("LockState", [string]$siteObj.LockState)
         $param = $SqlCmd.Parameters.AddWithValue("DenyAddAndCustomizePages", [string]$siteObj.DenyAddAndCustomizePages)
         $param = $SqlCmd.Parameters.AddWithValue("PWAEnabled", [string]$siteObj.PWAEnabled)
@@ -115,10 +132,12 @@ Function UpdateSPOSiteRecord {
         $param = $SqlCmd.Parameters.AddWithValue("O365GroupID", [string]$siteObj.GroupId)      
         $param = $SqlCmd.Parameters.AddWithValue("HubSiteID", [string]$siteObj.HubSiteId)
         $param = $SqlCmd.Parameters.AddWithValue("IsHubSite", [string]$siteObj.IsHubSite)
-        $param = $SqlCmd.Parameters.AddWithValue("HubName", [string]$siteObj.HubName)
-        $param = $SqlCmd.Parameters.AddWithValue("Created", [string]$siteObj.Created)
+        $param = $SqlCmd.Parameters.AddWithValue("HubName", [string]$siteObj.HubName)        
         $param = $SqlCmd.Parameters.AddWithValue("FilesCount", [string]$siteObj.FilesCount)
-        
+        <#$param = $SqlCmd.Parameters.AddWithValue("PageViews", [string]$siteObj.PageViews)
+        $param = $SqlCmd.Parameters.AddWithValue("Pagevisits", [string]$siteObj.Pagevisits)
+        $param = $SqlCmd.Parameters.AddWithValue("FilesViewdOrEdited", [string]$siteObj.FilesViewdOrEdited)
+        #>
 
         #$param = $SqlCmd.Parameters.AddWithValue("CommunicationSiteDesign", [string]$siteObj.CommunicationSiteDesign) 
         #$param = $SqlCmd.Parameters.AddWithValue("PrivacySetting", [string]$siteObj.PrivacySetting)   
@@ -144,12 +163,12 @@ Function UpdateSPOSiteRecord {
         $siteObj.OperationStatus = $retStatus
         $siteObj.AdditionalInfo = $retMsg
         if ($retStatus -eq "Failed") {
-            LogWrite -Message "Failed for $($siteobj.URL). ErrorInfo: $($retMsg)"
+            LogWrite -Message "Failed for $($siteobj.URL): $($retMsg)"
         }
         
     }
     catch {
-        LogWrite -Level ERROR -Message "Error adding the Site info to Database. Error info: $($_)"
+        LogWrite -Level ERROR -Message "Adding the Site info to DB issue: $($_)"
     }    
 }
 
@@ -198,11 +217,11 @@ Function UpdateSPOSiteExternalSharingRecord {
             $res = $SqlCmd.ExecuteNonQuery()
         }
         catch {
-            LogWrite -Level ERROR -Message "Error update [ExternalSharingEnabled] to Sites table. Error info: $($_)"
+            LogWrite -Level ERROR -Message "Updating [ExternalSharingEnabled] to Sites table issue: $($_)"
         } 
     }
     catch {
-        LogWrite -Level ERROR -Message "Error connecting to Database. Error info: $($_)"
+        LogWrite -Level ERROR -Message "Connecting to DB issue: $($_)"
     }
         
     finally {            
@@ -241,7 +260,7 @@ Function GetSitesExternalSharing {
         }
         catch [Exception]
         {
-           LogWrite -Level ERROR -Message "Error connecting to Database. Error info: $($_.Exception.Message)" 
+           LogWrite -Level ERROR -Message "Getting sites enabled external sharing issue: $($_.Exception.Message)" 
         }
         finally
         {
@@ -310,7 +329,7 @@ Function GetSitesInDB {
         }
         catch [Exception]
         {
-           LogWrite -Level ERROR -Message "Error connecting to Database. Error info: $($_.Exception.Message)" 
+           LogWrite -Level ERROR -Message "Getting sites from DB issue: $($_.Exception.Message)" 
         }
         finally
         {
@@ -343,11 +362,11 @@ Function UpdatePersonalSiteSCA {
             $res = $SqlCmd.ExecuteNonQuery()
         }
         catch {            
-            LogWrite -Level ERROR "Error updating SCA for Personal Site [$($siteObj.URL)]. Error info: $($_)"
+            LogWrite -Level ERROR "Updating SCA for Personal Site [$($siteObj.URL)] issue: $($_)"
         } 
     }
     catch {
-       LogWrite -Level ERROR "Error connecting to Database. Error info: $($_)"
+       LogWrite -Level ERROR "Connecting to DB issue: $($_)"
     }
         
     finally {
@@ -357,101 +376,97 @@ Function UpdatePersonalSiteSCA {
     }        
 }
 
-
-#region not in used
-<#
-function UpdateSPOSiteExtenedRecord {
-    param($SqlConnection, $siteObj)
-    
+#region Permanently delete user
+Function DeleteInvalidSites {
+    param($connectionString,$SyncDate)   
+    #Initialize SQL Connections
+    $SqlConnection = New-Object System.Data.SqlClient.SqlConnection
+    $SqlConnection.ConnectionString = $connectionString   
+    $SqlConnection.Open()    
     try {
         # initialize stored procedure
         $SqlCmd = New-Object System.Data.SqlClient.SqlCommand
         $SqlCmd.CommandType = [System.Data.CommandType]'StoredProcedure'
-        $SqlCmd.CommandText = "SetSiteExtendedInfo"
+        $SqlCmd.CommandText = "DeleteInvalidSites"
         $SqlCmd.Connection = $SqlConnection
-
-        # supply the name of the stored procedure
-        $ret_Status = new-object System.Data.SqlClient.SqlParameter;
-        $ret_Status.ParameterName = "@Ret_Status";
-        $ret_Status.Direction = [System.Data.ParameterDirection]'Output';
-        $ret_Status.DbType = [System.Data.DbType]'String';
-        $ret_Status.Size = 100; 
-
-        $ret_Message = new-object System.Data.SqlClient.SqlParameter;
-        $ret_Message.ParameterName = "@Ret_Message";
-        $ret_Message.Direction = [System.Data.ParameterDirection]'Output';
-        $ret_Message.DbType = [System.Data.DbType]'String';
-        $ret_Message.Size = 5000;    
-
-        $ret_Operation = new-object System.Data.SqlClient.SqlParameter;
-        $ret_Operation.ParameterName = "@ret_Operation";
-        $ret_Operation.Direction = [System.Data.ParameterDirection]'Output';
-        $ret_Operation.DbType = [System.Data.DbType]'String';
-        $ret_Operation.Size = 100;   
-        
-        $SqlCmd.Parameters.AddWithValue("SiteType", [string]$siteObj.SiteType)
-        $SqlCmd.Parameters.AddWithValue("URL", [string]$siteObj.URL)
-        $SqlCmd.Parameters.AddWithValue("SecondarySCA", [string]$siteObj.SecondarySCA)
-        $SqlCmd.Parameters.AddWithValue("WebsCount", [string]$siteObj.NumberOfSubSites)
-        $SqlCmd.Parameters.AddWithValue("FilesCount", [string]$siteObj.FilesCount)
-        $SqlCmd.Parameters.AddWithValue("ICName", [string]$siteObj.ICName)        
-        $SqlCmd.Parameters.AddWithValue("IsAuditEnabled", [string]$siteObj.IsAuditEnabled)
-        $SqlCmd.Parameters.AddWithValue("IsHubSite", [string]$siteObj.IsHubSite)
-        $SqlCmd.Parameters.AddWithValue("HubSiteID", [string]$siteObj.HubSiteID)
-        #$SqlCmd.Parameters.AddWithValue("LastContentModifiedDate", [string]$siteObj.LastContentModifiedDate)
-
-        $SqlCmd.Parameters.Add($ret_Status) >> $null;
-        $SqlCmd.Parameters.Add($ret_Message) >> $null;
-        $SqlCmd.Parameters.Add($ret_Operation) >> $null;
-        
+        $SqlCmd.Parameters.AddWithValue("SyncDate", $SyncDate)
         $res = $SqlCmd.ExecuteNonQuery()
-
-        $retStatus = $SqlCmd.Parameters["@Ret_Status"].Value; 
-        $retMsg = $SqlCmd.Parameters["@Ret_Message"].Value;
-        $retOperation = $SqlCmd.Parameters["@Ret_Operation"].Value;
-        
-        #For testing
-        #Write-Host "$($siteObj.Url)"
-        #Write-Log "Operation: $($retStatus)"
-        #Write-Log "AdditionalInfo: $($retMsg)"
-
-        $siteObj.Operation = $retOperation
-        $siteObj.OperationStatus = $retStatus
-        $siteObj.AdditionalInfo = $retMsg
-
-        
-        
     }
     catch {
-        Write-Log "Error adding the Site info for $($siteObj.Url) to Database. Error info: $($_)"
-    } 
+        LogWrite -Level ERROR "Deleting invalid sites from DB issue: $($_)"
+    }
+    finally{
+        #Close Connection        
+        $SqlCmd.Dispose()                     
+        $SqlConnection.Dispose()
+        $SqlConnection.Close()  
+    }
 }
+#endregion
 
-function UpdateSitesExtenedInfoToDatabase {
-    param($connectionString, $sitesData)
-   
-    if ($sitesData -ne $null) {
-        #Initialize SQL Connections
+#region Permanently Delete Invalid PersonalSites
+Function DeleteInvalidPersonalSites {
+    param($connectionString,$SyncDate)   
+    #Initialize SQL Connections
+    $SqlConnection = New-Object System.Data.SqlClient.SqlConnection
+    $SqlConnection.ConnectionString = $connectionString   
+    $SqlConnection.Open()    
+    try {
+        # initialize stored procedure
+        $SqlCmd = New-Object System.Data.SqlClient.SqlCommand
+        $SqlCmd.CommandType = [System.Data.CommandType]'StoredProcedure'
+        $SqlCmd.CommandText = "DeleteInvalidPersonalSites"
+        $SqlCmd.Connection = $SqlConnection
+        $SqlCmd.Parameters.AddWithValue("SyncDate", $SyncDate)
+        $res = $SqlCmd.ExecuteNonQuery()
+    }
+    catch {
+        LogWrite -Level ERROR "Deleting invalid personal sites from DB issue: $($_)"
+    }
+    finally{
+        #Close Connection        
+        $SqlCmd.Dispose()                     
+        $SqlConnection.Dispose()
+        $SqlConnection.Close()  
+    }
+}
+#endregion
+
+Function GetActiveChangeRequests {  
+    Param(
+        [Parameter(Mandatory=$true)]$connectionString
+        #[Parameter(Mandatory=$true)]$RequestStatus
+    ) 
+    Process
+    {
+        $activeRequests = @()
         $SqlConnection = New-Object System.Data.SqlClient.SqlConnection
         $SqlConnection.ConnectionString = $connectionString   
-        $SqlConnection.Open()
 
-        $i = 1
-        $count = @($sitesData).Count
-        
-        foreach ($site in $sitesData) {
-            if ($site -ne $null) {
-                Write-Log "($($i)/$($count)): Updating Extended Attribute for $($site.Url)" -logVerbose $true
+        $SqlCmd = New-Object System.Data.SqlClient.SqlCommand
+        $SqlCmd.CommandType = [System.Data.CommandType]'StoredProcedure'
+        $SqlCmd.CommandText = "GetAllActiveChangeRequests"
+        $SqlCmd.Connection = $SqlConnection
+        $SqlAdapter = New-Object System.Data.SqlClient.SqlDataAdapter 
+        $SqlAdapter.SelectCommand = $SqlCmd
+        $DataSet = New-Object System.Data.DataSet
+        $rowCount =$SqlAdapter.Fill($DataSet)
+        $activeRequests = $dataset.Tables[0] 
 
-                UpdateSPOSiteExtenedRecord $SqlConnection $site
-                $i++        
-            }
+        try
+        {
+            $SqlConnection.Open()
+            return $activeRequests
         }
-
-        #Close Connection
-        $SqlConnection.Close()
-    }    
-
+        catch [Exception]
+        {
+           LogWrite -Level ERROR -Message "Getting active change requests issue: $($_.Exception.Message)" 
+        }
+        finally
+        {
+            $SqlConnection.Close()
+            $SqlCmd.Dispose()
+            $SqlConnection.Dispose()
+        }
+    }
 }
-#>
-#endregion

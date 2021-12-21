@@ -4,8 +4,9 @@
     LogWrite -Message "Getting acces token using Graph API..."
     #Invoke-GraphAPIAuthTokenCheck
 
-    $script:Certificate = Get-Item Cert:\\LocalMachine\\My\* | Where-Object { $_.Subject -ieq "CN=$($script:appCertAdminPortalOperation)" }    
-    $script:authToken = Connect-NIHO365GraphWithCert -TenantName $script:TenantName -AppId $script:appIdAdminPortalOperation -Certificate $script:Certificate
+    #$script:Certificate = Get-Item Cert:\\LocalMachine\\My\* | Where-Object { $_.Subject -ieq "CN=$($script:appCertAdminPortalOperation)" }    
+    #$script:authToken = Connect-NIHO365GraphWithCert -TenantName $script:TenantName -AppId $script:appIdAdminPortalOperation -Certificate $script:Certificate
+    $script:authToken = Connect-GraphAPIWithCert -TenantId $script:TenantName -AppId $script:appIdAdminPortalOperation -Thumbprint $script:appThumbprintAdminPortalOperation
 
     if ($script:authToken) {
         LogWrite -Message  "Retrieving Active M365 Groups starting..."
@@ -27,7 +28,8 @@
         LogWrite -Message  "Retrieving Active M365 Groups completed."
     }
     
-    $script:authToken = Connect-NIHO365GraphWithCert -TenantName $script:TenantName -AppId $script:appIdAdminPortalOperation -Certificate $script:Certificate
+    #$script:authToken = Connect-NIHO365GraphWithCert -TenantName $script:TenantName -AppId $script:appIdAdminPortalOperation -Certificate $script:Certificate
+    $script:authToken = Connect-GraphAPIWithCert -TenantId $script:TenantName -AppId $script:appIdAdminPortalOperation -Thumbprint $script:appThumbprintAdminPortalOperation
 
     if ($script:authToken) {
         LogWrite -Message  'Retrieving Deleted M365 Groups starting...'             
@@ -77,11 +79,11 @@ Function ParseTeams {
     [System.Collections.ArrayList]$TeamsList = @()
     $Teams = @($Teams) 
     if ($Teams -and $Teams.Count -gt 0) {
-        $Teams.ForEach( {
+        $Teams | & { process {
                 $Id = $_.id
                 if ($Id) {
                     LogWrite -Message  "Processing the team [$Id]..."                    
-                    $script:authToken = Connect-NIHO365GraphWithCert -TenantName $script:TenantName -AppId $script:appIdAdminPortalOperation -Certificate $script:Certificate
+                    $script:authToken = Connect-GraphAPIWithCert -TenantId $script:TenantName -AppId $script:appIdAdminPortalOperation -Thumbprint $script:appThumbprintAdminPortalOperation
 
                     if ($script:authToken) {
                         $r = Get-NIHTeam -AuthToken $script:authToken -Id $Id
@@ -132,7 +134,7 @@ Function ParseTeams {
                             AdditionalInfo                          = ""
                         });
                 }
-            })
+            }}
     }    
     return $TeamsList
 } 
@@ -155,12 +157,12 @@ Function ParseTeamChannel {
     if ($Teams -and $Teams.Count -gt 0) {        
         $i = 1
         $totalTeams = $Teams.Count        
-        $Teams.ForEach( {
+        $Teams | & { process {
             $Id = $_.id              
             $TeamName = $_.DisplayName
             if ($Id) {
                 LogWrite -Message  "($i/$totalTeams) : Processing the team [$Id] to get team channel..."                
-                $script:authToken = Connect-NIHO365GraphWithCert -TenantName $script:TenantName -AppId $script:appIdAdminPortalOperation -Certificate $script:Certificate
+                $script:authToken = Connect-GraphAPIWithCert -TenantId $script:TenantName -AppId $script:appIdAdminPortalOperation -Thumbprint $script:appThumbprintAdminPortalOperation
 
                 if ($script:authToken) {                    
                     $c = Get-NIHTeamChannel -AuthToken $script:authToken -Id $Id
@@ -195,7 +197,7 @@ Function ParseTeamChannel {
                             #Get private channel owners/members/guests
                             if ($channelId -and $itemChannel.membershipType -eq 'Private') {
                                 $script:totalPrivateChannel++
-                                $script:authToken = Connect-NIHO365GraphWithCert -TenantName $script:TenantName -AppId $script:appIdAdminPortalOperation -Certificate $script:Certificate
+                                $script:authToken = Connect-GraphAPIWithCert -TenantId $script:TenantName -AppId $script:appIdAdminPortalOperation -Thumbprint $script:appThumbprintAdminPortalOperation
                                                                  
                                 if ($script:authToken) {                                    
                                     $channelAllMembersResponse = $null
@@ -253,7 +255,7 @@ Function ParseTeamChannel {
             }
             $i++
             LogWrite -Message  "Completed team!"                
-        })
+        }}
     } 
     LogWrite -Message "Total Graph API call: $calls"   
     return $ChannelList
@@ -272,14 +274,15 @@ Function ParseO365Groups {
     [System.Collections.ArrayList]$GroupList = @()
     $Groups = @($Groups)
     if ($Groups -and $Groups.Count -gt 0) {
-        $Groups.ForEach( {
+        $Groups | & { process {
                 $Id = $_.id;                
                 #$GroupOwners, $GroupMembers = $null;                   
                 #Get group owners/members
-                $script:authToken = Connect-NIHO365GraphWithCert -TenantName $script:TenantName -AppId $script:appIdAdminPortalOperation -Certificate $script:Certificate
+                $script:authToken = Connect-GraphAPIWithCert -TenantId $script:TenantName -AppId $script:appIdAdminPortalOperation -Thumbprint $script:appThumbprintAdminPortalOperation
 
                 if ($Id) {
                     if ($script:authToken) {
+                        $extendProps = Get-NIHO365Group -AuthToken $script:authToken -Id $Id -Select hideFromAddressLists, hideFromOutlookClients
                         $ownersReponse = Get-NIHO365GroupOwners -AuthToken $script:authToken -Id $Id 
                         $membersReponse = Get-NIHO365GroupMembers -AuthToken $script:authToken -Id $Id
                         $guestsReponse = $membersReponse | Where-Object { $_.userPrincipalName -like '*#EXT#*' }   
@@ -335,13 +338,78 @@ Function ParseO365Groups {
                         OnPremisesSecurityIdentifier = $_.OnPremisesSecurityIdentifier;                      
                         AllowExternalSenders         = $_.AllowExternalSenders;
                         AutoSubscribeNewMembers      = $_.AutoSubscribeNewMembers;
-                        HideFromAddressLists         = $_.HideFromAddressLists;
-                        HideFromOutlookClients       = $_.HideFromOutlookClients;
+                        HideFromAddressLists         = $extendProps.HideFromAddressLists;
+                        HideFromOutlookClients       = $extendProps.HideFromOutlookClients;
                         OperationStatus              = ""; 
                         Operation                    = ""; 
                         AdditionalInfo               = ""                  
                     });            
-            })
+            }}
     }
     return $GroupList 
 }
+
+#region Provisioning
+Function ParseO365Group {
+    param($Group,$GroupOwners,$GroupMembers,$HideFromAddressLists,$HideFromOutlookClients)
+    if ($Group) {
+        return [PSCustomObject]@{
+            GroupID                      = $Group.Id;
+            GroupOwners                  = $GroupOwners; #if ($GroupOwners) { $GroupOwners } else { $null };
+            GroupMembers                 = $GroupMembers; #if ($GroupMembers) { $GroupMembers } else { $null };
+            GroupGuests                  = ""
+            OnPremisesSyncEnabled        = $Group.onPremisesSyncEnabled;
+            DisplayName                  = $Group.displayName;
+            Description                  = $Group.description;
+            Classification               = $Group.classification;
+            CreatedDateTime              = $Group.createdDateTime;
+            DeletedDateTime              = $Group.deletedDateTime;
+            CreationOptions              = $Group.creationOptions -join ',';
+            IsAssignableToRole           = $Group.isAssignableToRole;
+            Mail                         = $Group.mail ;
+            MailNickname                 = $Group.mailNickname;
+            MailEnabled                  = $Group.mailEnabled;
+            ProxyAddresses               = $Group.proxyAddresses -join ',';
+            RenewedDateTime              = $Group.renewedDateTime;
+            ResourceBehaviorOptions      = $Group.resourceBehaviorOptions -join ',';
+            ResourceProvisioningOptions  = $Group.resourceProvisioningOptions -join ',';
+            SecurityEnabled              = $Group.securityEnabled;
+            SecurityIdentifier           = $Group.securityIdentifier;
+            Visibility                   = $Group.visibility;  
+            OnPremisesLastSyncDateTime   = $Group.OnPremisesLastSyncDateTime;                        
+            OnPremisesSamAccountName     = $Group.OnPremisesSamAccountName;
+            OnPremisesSecurityIdentifier = $Group.OnPremisesSecurityIdentifier;                      
+            AllowExternalSenders         = $Group.AllowExternalSenders;
+            AutoSubscribeNewMembers      = $Group.AutoSubscribeNewMembers;
+            #HideFromAddressLists         = $Group.HideFromAddressLists;
+            #HideFromOutlookClients       = $Group.HideFromOutlookClients;
+            HideFromAddressLists         = $HideFromAddressLists;
+            HideFromOutlookClients       = $HideFromOutlookClients;
+            OperationStatus              = ""; 
+            Operation                    = ""; 
+            AdditionalInfo               = "" 
+        }
+    }
+}
+
+Function ParseO365Team {
+    param($Team)
+    if ($Team) {
+        return [PSCustomObject]@{
+            # group object
+            GroupID                                 = $Team.id                                       
+            DisplayName                             = $Team.displayName
+            Description                             = $Team.description
+            InternalId                              = $Team.internalId
+            Classification                          = $Team.classification
+            CreatedDateTime                         = $Team.createdDateTime
+            Visibility                              = $Team.visibility
+            WebUrl                                  = $Team.webUrl
+            IsArchived                              = $Team.isArchived
+            OperationStatus                         = ""; 
+            Operation                               = ""; 
+            AdditionalInfo                          = ""
+        }
+    }
+}
+#endregion

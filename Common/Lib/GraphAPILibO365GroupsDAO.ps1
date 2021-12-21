@@ -152,7 +152,7 @@ function UpdateO365GroupRecord {
         if ($groupObj.DeletedDateTime -ne '' -and $groupObj.DeletedDateTime -ne $null) {
             $SqlCmd.Parameters["DeletedDateTime"].Value = [string]$groupObj.DeletedDateTime
         }         
-        $param = $SqlCmd.Parameters.AddWithValue("CreationOption", [string]$groupObj.CreationOption)
+        $param = $SqlCmd.Parameters.AddWithValue("CreationOption", [string]$groupObj.CreationOptions)
         $param = $SqlCmd.Parameters.AddWithValue("IsAssignableToRole", [string]$groupObj.IsAssignableToRole)
         $param = $SqlCmd.Parameters.AddWithValue("Mail", [string]$groupObj.Mail)
         $param = $SqlCmd.Parameters.AddWithValue("MailNickname", [string]$groupObj.MailNickname)
@@ -314,6 +314,23 @@ function UpdateTeamRecord {
         LogWrite -Level ERROR -Message "Adding the Team info to Database: $($_)"
     }  
 }
+function UpdateSQLTeam {
+    <#
+      .Synopsis
+        Update a group to DB      
+    #>
+    param($connectionString, $groupData)
+    if ($groupData) {
+        #Initialize SQL Connections
+        $SqlConnection = New-Object System.Data.SqlClient.SqlConnection
+        $SqlConnection.ConnectionString = $connectionString   
+        $SqlConnection.Open()
+        UpdateTeamRecord $SqlConnection $groupData
+        #Close Connection
+        $SqlConnection.Close()
+    }           
+}
+
 function UpdateTeamsChannel {
     param($connectionString, $teamsChannelData)
    
@@ -403,19 +420,149 @@ function UpdateTeamChannelRecord {
         LogWrite -Level ERROR -Message "Adding the Team Channel info to DB: $($_)"
     }  
 }
-function UpdateSQLTeam {
-    <#
-      .Synopsis
-        Update a group to DB      
-    #>
-    param($connectionString, $groupData)
-    if ($groupData) {
-        #Initialize SQL Connections
+
+Function GetOrphanedTeams {
+    Param(
+        [Parameter(Mandatory=$true)]$connectionString,
+        [Parameter(Mandatory=$false)]$AdmSvc
+    )
+    Process
+    {
+        $SqlConnection = New-Object System.Data.SqlClient.SqlConnection
+        $SqlConnection.ConnectionString = $connectionString   
+
+        $SqlCmd = New-Object System.Data.SqlClient.SqlCommand
+        $SqlCmd.CommandType = [System.Data.CommandType]'StoredProcedure'
+        $SqlCmd.CommandText = "GetOrphanedTeams"
+        $SqlCmd.Connection = $SqlConnection
+        $SqlCmd.Parameters.AddWithValue("AdmSvc", $AdmSvc) | Out-Null
+        
+        $SqlAdapter = New-Object System.Data.SqlClient.SqlDataAdapter 
+        $SqlAdapter.SelectCommand = $SqlCmd
+        $DataSet = New-Object System.Data.DataSet
+        $rowCount =$SqlAdapter.Fill($DataSet) | Out-Null
+        $OrphanedTeams = $dataset.Tables[0] 
+
+        try
+        {
+            $SqlConnection.Open()
+            return $OrphanedTeams
+        }
+        catch [Exception]
+        {
+           LogWrite -Level ERROR -Message "Error connecting to Database: $($_.Exception.Message)" 
+        }
+        finally
+        {
+            $SqlConnection.Close()
+            $SqlCmd.Dispose()
+            $SqlConnection.Dispose()
+        }
+    }
+}
+Function GetOrphanedGroups {
+    Param(
+        [Parameter(Mandatory=$true)]$connectionString,
+        [Parameter(Mandatory=$false)]$AdmSvc
+    )
+    Process
+    {
+        try
+        {
+            $SqlConnection = New-Object System.Data.SqlClient.SqlConnection
+            $SqlConnection.ConnectionString = $connectionString   
+
+            $SqlCmd = New-Object System.Data.SqlClient.SqlCommand
+            $SqlCmd.CommandType = [System.Data.CommandType]'StoredProcedure'
+            $SqlCmd.CommandText = "GetOrphanedGroups"
+            $SqlCmd.Connection = $SqlConnection
+            $SqlCmd.Parameters.AddWithValue("AdmSvc", $AdmSvc) | Out-Null
+        
+            $SqlAdapter = New-Object System.Data.SqlClient.SqlDataAdapter 
+            $SqlAdapter.SelectCommand = $SqlCmd
+            $DataSet = New-Object System.Data.DataSet
+            $SqlAdapter.Fill($DataSet) | Out-Null
+        
+            $SqlConnection.Open()
+            $SqlConnection.Close()
+            $SqlCmd.Dispose()
+            $SqlConnection.Dispose()
+        
+            return $DataSet
+
+            <#ForEach($table in $DataSet.Tables) {
+                $table |Out-GridView -PassThru
+            }#> 
+        }      
+        
+        catch [Exception] {
+           LogWrite -Level ERROR -Message "Error connecting to Database: $($_.Exception.Message)" 
+        }
+    }
+}
+
+#region Post Change Request
+Function UpdateGroupTeamPostChangeRequest {  
+    param(
+        [Parameter(Mandatory=$true)] $ConnectionString,
+        [Parameter(Mandatory=$false)]$teamObj,
+        [Parameter(Mandatory=$false)]$HideFromOutlookClients,
+        [Parameter(Mandatory=$false)]$HideFromAddressLists
+    )
+   
+    #Initialize SQL Connections
+    try {
         $SqlConnection = New-Object System.Data.SqlClient.SqlConnection
         $SqlConnection.ConnectionString = $connectionString   
         $SqlConnection.Open()
-        UpdateTeamRecord $SqlConnection $groupData
-        #Close Connection
+        
+        try {
+            # initialize stored procedure
+            $SqlCmd = New-Object System.Data.SqlClient.SqlCommand
+            $SqlCmd.CommandType = [System.Data.CommandType]'StoredProcedure'
+            $SqlCmd.CommandText = "UpdateGroupTeamInfo"
+            $SqlCmd.Connection = $SqlConnection                  
+
+            $groupId = $teamObj.GroupId
+            if ($groupId -eq $null){
+                $groupId = $teamObj.Id
+            }
+        
+            $SqlCmd.Parameters.AddWithValue("GroupId", $groupId)
+            $SqlCmd.Parameters.AddWithValue("DisplayName", [string]$teamObj.DisplayName)
+            $SqlCmd.Parameters.AddWithValue("Description", [string]$teamObj.Description)
+            $SqlCmd.Parameters.AddWithValue("Visibility", [string]$teamObj.Visibility)
+            $SqlCmd.Parameters.AddWithValue("HideFromOutlookClients", $HideFromOutlookClients)
+            $SqlCmd.Parameters.AddWithValue("HideFromAddressLists", $HideFromAddressLists)
+
+            <#
+            $SqlCmd.Parameters.AddWithValue("HideFromAddressLists", $null)        
+            if ($teamObj.HideFromAddressLists -ne '' -and $teamObj.HideFromAddressLists -ne $null) {
+                $SqlCmd.Parameters["HideFromAddressLists"].Value = [string]$teamObj.HideFromAddressLists
+            }        
+            $SqlCmd.Parameters.AddWithValue("HideFromOutlookClients", $null)        
+            if ($teamObj.HideFromOutlookClients -ne '' -and $teamObj.HideFromOutlookClients -ne $null) {
+                $SqlCmd.Parameters["HideFromOutlookClients"].Value = [string]$teamObj.HideFromOutlookClients
+            }     
+            #>       
+            $res = $SqlCmd.ExecuteNonQuery()
+                        
+            LogWrite -Message "Post-ChangeRequest: Update group/team into Groups and Teams table."  
+
+        }
+        catch {
+            LogWrite -Level ERROR -Message "Updating [Group/Team] to Groups and Teams table issue: $($_)"            
+        } 
+    }
+    catch {
+        LogWrite -Level ERROR -Message "Connecting to DB issue: $($_)"
+    }
+        
+    finally {            
         $SqlConnection.Close()
-    }           
+        $SqlCmd.Dispose()
+        $SqlConnection.Dispose()
+    }  
 }
+#endregion
+

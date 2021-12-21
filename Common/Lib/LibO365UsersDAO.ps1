@@ -102,6 +102,7 @@ Function UpdateO365UserRecord {
         $param=$SqlCmd.Parameters.AddWithValue("@Licenses",[string]$userObj.AssignedLicenses)
         $param=$SqlCmd.Parameters.AddWithValue("@AppLicenses",[string]$userObj.AssignedPlans)
         $param=$SqlCmd.Parameters.AddWithValue("@Created",[datetime]$userObj.CreatedDateTime)
+        $param=$SqlCmd.Parameters.AddWithValue("@SoftDeletionTimestamp",[string]$userObj.SoftDeletionTimestamp)
         #$param=$SqlCmd.Parameters.AddWithValue("@LastDirSyncTime",[string]$userObj.LastDirSyncTime)
         $param=$SqlCmd.Parameters.AddWithValue("@UserPrincipalName",[string]$userObj.UserPrincipalName)
         $param=$SqlCmd.Parameters.AddWithValue("@LastPasswordChangeTimeStamp",[string]$userObj.lastPasswordChangeDateTime)
@@ -118,8 +119,7 @@ Function UpdateO365UserRecord {
         #$param=$SqlCmd.Parameters.AddWithValue("@PasswordNeverExpires",[string]$userObj.PasswordNeverExpires)
         #$param=$SqlCmd.Parameters.AddWithValue("@OverallProvisioningStatus",[string]$userObj.OverallProvisioningStatus)
         $param=$SqlCmd.Parameters.AddWithValue("@Title",[string]$userObj.JobTitle)
-        #$param=$SqlCmd.Parameters.AddWithValue("@ValidationStatus",[string]$userObj.ValidationStatus)
-        #$param=$SqlCmd.Parameters.AddWithValue("@SoftDeletionTimestamp",[string]$userObj.SoftDeletionTimestamp)
+        #$param=$SqlCmd.Parameters.AddWithValue("@ValidationStatus",[string]$userObj.ValidationStatus)        
         #$param=$SqlCmd.Parameters.AddWithValue("@LiveId",[string]$userObj.LiveId)
         #$param=$SqlCmd.Parameters.AddWithValue("@MSRtcSipPrimaryUserAddress",[string]$userObj.MSRtcSipPrimaryUserAddress)
         
@@ -152,106 +152,4 @@ Function UpdateO365UserRecord {
     {
         LogWrite -Level ERROR -Message  "Error executing query. Error Info $($_)"
     }
-}
-
-
-
-function UpdateO365UserExtenedRecord
-{
-    param($SqlConnection, $UserObj)
-    
-    try
-    {
-        # initialize stored procedure
-        $SqlCmd = New-Object System.Data.SqlClient.SqlCommand
-        $SqlCmd.CommandType=[System.Data.CommandType]'StoredProcedure'
-        $SqlCmd.CommandText = "SetUserExtendedInfo"
-        $SqlCmd.Connection = $SqlConnection
-
-        # supply the name of the stored procedure
-        $ret_Status = new-object System.Data.SqlClient.SqlParameter;
-        $ret_Status.ParameterName = "@Ret_Status";
-        $ret_Status.Direction = [System.Data.ParameterDirection]'Output';
-        $ret_Status.DbType = [System.Data.DbType]'String';
-        $ret_Status.Size = 100; 
-
-        $ret_Message = new-object System.Data.SqlClient.SqlParameter;
-        $ret_Message.ParameterName = "@Ret_Message";
-        $ret_Message.Direction = [System.Data.ParameterDirection]'Output';
-        $ret_Message.DbType = [System.Data.DbType]'String';
-        $ret_Message.Size = 5000;    
-
-        $ret_Operation = new-object System.Data.SqlClient.SqlParameter;
-        $ret_Operation.ParameterName = "@ret_Operation";
-        $ret_Operation.Direction = [System.Data.ParameterDirection]'Output';
-        $ret_Operation.DbType = [System.Data.DbType]'String';
-        $ret_Operation.Size = 100;    
-
-        $param=$SqlCmd.Parameters.AddWithValue("UserId", [string]$UserObj.UserId)
-        $param=$SqlCmd.Parameters.AddWithValue("PersonalSiteURL", [string]$UserObj.PersonalSiteURL)
-        $param=$SqlCmd.Parameters.AddWithValue("PersonalSiteFirstCreationTime", [string]$UserObj.PersonalSiteFirstCreationTime)
-        $param=$SqlCmd.Parameters.AddWithValue("PersonalSiteLastCreationTime", [string]$UserObj.PersonalSiteLastCreationTime)
-        
-        
-
-        $SqlCmd.Parameters.Add($ret_Status) >> $null;
-        $SqlCmd.Parameters.Add($ret_Message) >> $null;
-        $SqlCmd.Parameters.Add($ret_Operation) >> $null;
-        
-        $res = $SqlCmd.ExecuteNonQuery()
-
-        $retStatus = $SqlCmd.Parameters["@Ret_Status"].Value; 
-        $retMsg = $SqlCmd.Parameters["@Ret_Message"].Value;
-        $retOperation = $SqlCmd.Parameters["@Ret_Operation"].Value;
-        
-        #For testing
-        Write-Host "$($UserObj.Url)"
-        Write-Host "$($retMsg)"
-
-        $UserObj.OperationStatus = $retStatus
-        $UserObj.AdditionalInfo = $retMsg
-
-        
-        #>
-    }
-    catch
-    {
-        Write-Log "Error adding the User info for $($UserObj.Signinname) to Database. Error info: $($_)"
-    } 
-}
-
-
-function UpdateUsersExtenedInfoToDatabase
-{
-    param($connectionString, $UsersData)
-    
-    Write-Log "Processing Users Extended info"
-
-    if ($UsersData -ne $null)
-    {
-        #Initialize SQL Connections
-        $SqlConnection = New-Object System.Data.SqlClient.SqlConnection
-        $SqlConnection.ConnectionString = $connectionString   
-        $SqlConnection.Open()
-
-        $i=1
-        $count=@($UsersData).Count
-        
-        Write-Log "Total users updating to DB: $($count)"
-
-        foreach($User in $UsersData)
-        {
-            if($User -ne $null)
-            {
-                Write-Log "($($i)/$($count)): Updating Extended Attribute for $($User.SigninName)"
-
-                UpdateO365UserExtenedRecord $SqlConnection $User
-                $i++        
-            }
-        }
-
-        #Close Connection
-        $SqlConnection.Close()
-    }    
-
 }

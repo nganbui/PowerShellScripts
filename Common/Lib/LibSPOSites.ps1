@@ -2,7 +2,7 @@
     try {        
         LogWrite -Message "Connecting to SharePoint Online..."
         #ConnectPnpOnlineOAuth -TenantId $script:TenantId -ClientId $script:appIdAdminPortal -Thumbprint $script:appThumbprintAdminPortal -Url $script:SPOAdminCenterURL
-        $script:TenantContext = ConnectPnpOnlineOAuth -TenantId $script:TenantId -ClientId $script:appIdOperationSupport -Thumbprint $script:appThumbprintOperationSupport -Url $script:SPOAdminCenterURL
+        $SPOAdminConnection = ConnectPnpOnlineOAuth -TenantId $script:TenantId -ClientId $script:appIdOperationSupport -Thumbprint $script:appThumbprintOperationSupport -Url $script:SPOAdminCenterURL
         LogWrite -Message "SharePoint Online Administration Center is now connected."        
     }
     catch {    
@@ -13,7 +13,7 @@
     try {
         $retrivalStartTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 
-        <##region SPO Sites
+        #region SPO Sites
         #Retrieve Active SPO Sites
         LogWrite -Message "Retrieving Active SPO Sites from O365..."
         #Invoke-GraphAPIAuthTokenCheck
@@ -27,8 +27,7 @@
         $sites = Get-PnPTenantRecycleBinItem | select *       
         $script:deletedSitesData = ParseSPOSites -sitesObj $sites -SitesType Sites -ObjectState InActive -ParseObjType O365
         #endregion
-        #>
-
+        
         #region Personal Sites
         #Retrieve Active Personal Sites
         LogWrite -Message "Retrieving Active Personal Sites from O365..."        
@@ -45,7 +44,7 @@
     }
     catch {
         LogWrite -Level ERROR -Message "An error occured $($_.Exception)"        
-    }        
+    }       
 }
 
 Function ParseSPOSites {
@@ -100,7 +99,7 @@ Function ParseSPOSites {
                 $PageViews =  0
                 $Pagevisits =  0 
                 $FilesViewdOrEdited = 0
-                $LastActivityDate = $null 
+                #$LastActivityDate = $null 
             }
 
             "DB" {
@@ -166,8 +165,7 @@ Function ParseSPOSites {
             FilesCount                          = $FilesCount            
             PageViews                           = $PageViews
             Pagevisits                          = $Pagevisits
-            FilesViewdOrEdited                  = $FilesViewdOrEdited
-            LastActivityDate                    = $LastActivityDate
+            FilesViewdOrEdited                  = $FilesViewdOrEdited           
             Created                             = "";
             Modified                            = "";
             Operation                           = "";
@@ -198,10 +196,11 @@ function UpdateSitesProperties {
                         $sitesObj.GroupId = $siteDetailed.GroupId
                         $sitesObj.SharingDomainRestrictionMode = $siteDetailed.SharingDomainRestrictionMode;
                         $sitesObj.SharingAllowedDomainList = $siteDetailed.SharingAllowedDomainList
-                        $sitesObj.SharingBlockedDomainList = $siteDetailed.SharingBlockedDomainList;  
+                        $sitesObj.SharingBlockedDomainList = $siteDetailed.SharingBlockedDomainList;                           
+                        $sitesObj.Created = (Get-PnPWeb -Includes Created).Created.toshortdatestring()
                         $sitesObj.IsHubSite = $siteDetailed.IsHubSite;  
                         $sitesObj.HubSiteId = $siteDetailed.HubSiteId;    
-                        $sitesObj.DenyAddAndCustomizePages = $siteDetailed.DenyAddAndCustomizePages;         
+                        $sitesObj.DenyAddAndCustomizePages = $siteDetailed.DenyAddAndCustomizePages;                                 
                         $sitesObj.AllowEditing = $siteDetailed.AllowEditing;
                         if ($sitesObj.IsHubSite -eq $true){
                             $sitesObj.HubName = (Get-PnPHubSite -Identity $siteUrl).Title
@@ -216,15 +215,15 @@ function UpdateSitesProperties {
                     $siteContext = ConnectPnpOnlineOAuth -TenantId $script:TenantId -ClientId $script:appIdOperationSupport -Thumbprint $script:appThumbprintOperationSupport -Url $siteUrl                                  
                     $context = Get-PnPContext                
                     $Web = $context.Web 
-                    $context.Load($Web)
+                    $context.Load($Web)               
                     $List = $context.Web.Lists.GetByTitle("Documents")
                     $context.Load($List) 
                     $context.ExecuteQuery()
                     $sitesObj.FilesCount = $List.ItemCount
-                    $sitesObj.LastActivityDate = $list.LastItemUserModifiedDate.ToString()                    
+                    $sitesObj.LastContentModifiedDate = $list.LastItemUserModifiedDate.toshortdatestring()                   
                     $sitesObj.NumberOfSubSites =  $Web.Webs.Count                
                     $sitesObj.Description = $Web.Description
-                    $sitesObj.Created = $Web.Created.ToString()                    
+                    $sitesObj.Created = $Web.Created.toshortdatestring()                   
                     $siteAdmins = (Get-PnPSiteCollectionAdmin | ? {$_.Email -ne '' -and $_.Email.ToLower() -notlike 'spoadm*'}).Email -join ";"
                     $sitesObj.SecondarySCA = $siteAdmins
                     $context.Dispose()
@@ -237,7 +236,6 @@ function UpdateSitesProperties {
         }              
     }
 }
-
 
 Function CacheSPOSites {
     LogWrite -Level INFO -Message "Generating Cache files for SPO Sites starting..."
@@ -287,5 +285,34 @@ Function SyncPersonalSitesFromDBToCache{
     
     if($null -ne $deletedPersonalSitesInDB) {
         SetDataInCache -CacheData $deletedPersonalSitesInDB -CacheType DB -ObjectType PersonalSites -ObjectState InActive
+    }
+}
+
+Function SyncSitesFromDBToCache{
+    LogWrite -Level INFO -Message "Syncing all DB SPO Sites to Cache"
+    $activeSitesInDB = @()
+    $deletedSitesInDB = @()
+
+    #Get Data from DB
+    $activeSitesInDB = GetSitesInDB -ConnectionString $script:ConnectionString -SitesType SPOSites -StatusType Active
+    $activeSitesInDB = $activePersonalSitesInDB | ? { $_.SiteId -ne $null }
+    $deletedSitesInDB = GetSitesInDB -ConnectionString $script:ConnectionString -SitesType SPOSites -StatusType InActive
+    $deletedSitesInDB = $deletedPersonalSitesInDB | ? { $_.SiteId -ne $null }
+
+    #Parse DB Data
+    if ($null -ne $activeSitesInDB){
+        $activeSitesInDB = ParseSPOSites -sitesObj $activePersonalSitesInDB -SitesType SPOSites -ParseObjType DB -ObjectState Active
+    }
+    if ($null -ne $deletedSitesInDB){
+        $deletedSitesInDB = ParseSPOSites -sitesObj $deletedPersonalSitesInDB -SitesType SPOSites -ObjectState InActive
+    }
+
+    #Cache DB Sites Data
+    if($null -ne $activeSitesInDB) {
+        SetDataInCache -CacheData $activeSitesInDB -CacheType DB -ObjectType SPOSites -ObjectState Active
+    }
+    
+    if($null -ne $deletedSitesInDB) {
+        SetDataInCache -CacheData $deletedSitesInDB -CacheType DB -ObjectType SPOSites -ObjectState InActive
     }
 }

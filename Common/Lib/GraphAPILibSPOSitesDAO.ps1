@@ -97,6 +97,17 @@ Function UpdateSPOSiteRecord {
         $param = $SqlCmd.Parameters.AddWithValue("Status", [string]$siteObj.Status)
         $param = $SqlCmd.Parameters.AddWithValue("SiteStatus", [string]$siteObj.siteStatus)
         $param = $SqlCmd.Parameters.AddWithValue("SharingCapability", [string]$siteObj.SharingCapability)
+
+        $SqlCmd.Parameters.AddWithValue("ExternalSharingEnabled", $null)
+        $externalSharingEnabled = [string]$siteObj.ExternalSharingEnabled        
+        if ($externalSharingEnabled -ne '' -and $externalSharingEnabled -ne $null) {
+            $SqlCmd.Parameters["ExternalSharingEnabled"].Value = $externalSharingEnabled
+        }        
+        $SqlCmd.Parameters.AddWithValue("AppCatalogEnabled", $null)
+        $appCatalogEnabled = [string]$siteObj.AppCatalogEnabled        
+        if ($appCatalogEnabled -ne '' -and $appCatalogEnabled -ne $null) {
+            $SqlCmd.Parameters["AppCatalogEnabled"].Value = $appCatalogEnabled
+        }
         $param = $SqlCmd.Parameters.AddWithValue("LastContentModifiedDate", [string]$siteObj.LastContentModifiedDate)        
         $param = $SqlCmd.Parameters.AddWithValue("LockState", [string]$siteObj.LockState)
         $param = $SqlCmd.Parameters.AddWithValue("DenyAddAndCustomizePages", [string]$siteObj.DenyAddAndCustomizePages)
@@ -125,16 +136,7 @@ Function UpdateSPOSiteRecord {
         $param = $SqlCmd.Parameters.AddWithValue("HubSiteID", [string]$siteObj.HubSiteId)
         $param = $SqlCmd.Parameters.AddWithValue("IsHubSite", [string]$siteObj.IsHubSite)
         $param = $SqlCmd.Parameters.AddWithValue("HubName", [string]$siteObj.HubName)
-        $param = $SqlCmd.Parameters.AddWithValue("Created", [string]$siteObj.Created)
-        #$param = $SqlCmd.Parameters.AddWithValue("FilesCount", [string]$siteObj.FilesCount)
-        <#$param = $SqlCmd.Parameters.AddWithValue("PageViews", [string]$siteObj.PageViews)
-        $param = $SqlCmd.Parameters.AddWithValue("Pagevisits", [string]$siteObj.Pagevisits)
-        $param = $SqlCmd.Parameters.AddWithValue("FilesViewdOrEdited", [string]$siteObj.FilesViewdOrEdited)
-        #>
-
-        #$param = $SqlCmd.Parameters.AddWithValue("CommunicationSiteDesign", [string]$siteObj.CommunicationSiteDesign) 
-        #$param = $SqlCmd.Parameters.AddWithValue("PrivacySetting", [string]$siteObj.PrivacySetting)   
-        #$param = $SqlCmd.Parameters.AddWithValue("GroupEmailAddress", [string]$siteObj.GroupEmailAddress)        
+        $param = $SqlCmd.Parameters.AddWithValue("Created", [string]$siteObj.Created)           
         
         $deletedDate = $null
         if ($siteObj.DeletionTime -ne "" -and $null -ne $siteObj.DeletionTime) {
@@ -162,16 +164,24 @@ Function UpdateSPOSiteRecord {
     }
     catch {
         LogWrite -Level ERROR -Message "Adding the Site info to DB issue: $($_)"
+        throw $_
     }    
 }
 
-Function UpdateSPOSiteExternalSharingRecord {
-    param($connectionString, $siteObj, $ExternalSharingEnabled)
+Function UpdateSPOSiteExternalSharingRecord {    
+    Param(
+        [Parameter(Mandatory=$true)]$ConnectionString,
+        [Parameter(Mandatory=$true)]$SiteUrl,
+        [Parameter(Mandatory=$false)]$SiteObj,
+        [Parameter(Mandatory=$false)]$ExternalSharingEnabled = $null,
+        [Parameter(Mandatory=$false)]$HubName = $null,
+        [Parameter(Mandatory=$false)]$AppCatalogEnabled = $null
+    )
    
     #Initialize SQL Connections
     try {
         $SqlConnection = New-Object System.Data.SqlClient.SqlConnection
-        $SqlConnection.ConnectionString = $connectionString   
+        $SqlConnection.ConnectionString = $ConnectionString   
         $SqlConnection.Open()
         
         try {
@@ -181,20 +191,29 @@ Function UpdateSPOSiteExternalSharingRecord {
             $SqlCmd.CommandText = "UpdateSiteExternalSharing"
             $SqlCmd.Connection = $SqlConnection                  
         
-            $SqlCmd.Parameters.AddWithValue("URL", [string]$siteObj.URL)
-            $SqlCmd.Parameters.AddWithValue("Title", [string]$siteObj.Title)
-            $SqlCmd.Parameters.AddWithValue("TemplateId", [string]$siteObj.TemplateId)
-            $SqlCmd.Parameters.AddWithValue("AllowDomainList", [string]$siteObj.SharingAllowedDomainList)
-            $SqlCmd.Parameters.AddWithValue("SharingCapability", [string]$siteObj.SharingCapability)
-            $SqlCmd.Parameters.AddWithValue("SiteDefinedSharingCapability", [string]$siteObj.SiteDefinedSharingCapability)
-            $SqlCmd.Parameters.AddWithValue("ExternalSharingEnabled", $ExternalSharingEnabled)  
-        
+            $SqlCmd.Parameters.AddWithValue("URL", $SiteUrl)
+            $SqlCmd.Parameters.AddWithValue("Title", [string]$SiteObj.Title)
+            $SqlCmd.Parameters.AddWithValue("TemplateId", [string]$SiteObj.TemplateId)
+            $SqlCmd.Parameters.AddWithValue("AllowDomainList", [string]$SiteObj.SharingAllowedDomainList)
+            $SqlCmd.Parameters.AddWithValue("SharingCapability", [string]$SiteObj.SharingCapability)
+            $SqlCmd.Parameters.AddWithValue("SiteDefinedSharingCapability", [string]$SiteObj.SiteDefinedSharingCapability)
+            $SqlCmd.Parameters.AddWithValue("ExternalSharingEnabled", $ExternalSharingEnabled)            
+            $SqlCmd.Parameters.AddWithValue("IsHubSite", [string]$SiteObj.IsHubSite)
+            $SqlCmd.Parameters.AddWithValue("HubSiteId", [string]$SiteObj.HubSiteId)
+            $SqlCmd.Parameters.AddWithValue("HubName", $HubName)
+
+            $SqlCmd.Parameters.AddWithValue("DenyAddAndCustomizePages", $null)        
+            if ($SiteObj.DenyAddAndCustomizePages -ne '' -and $SiteObj.DenyAddAndCustomizePages -ne $null) {
+                $SqlCmd.Parameters["DenyAddAndCustomizePages"].Value = [string]$SiteObj.DenyAddAndCustomizePages
+            }
+            $SqlCmd.Parameters.AddWithValue("AppCatalogEnabled",$AppCatalogEnabled)
+
             $res = $SqlCmd.ExecuteNonQuery()
 
-            LogWrite -Message "Updated [ExternalSharingEnabled] = $ExternalSharingEnabled to the site $($siteObj.URL) in sites table"
+            LogWrite -Message "Updated props to the site $($siteObj.URL) in sites table"
         }
         catch {
-            LogWrite -Level ERROR -Message "Updating [ExternalSharingEnabled] to Sites table issue: $($_)"
+            LogWrite -Level ERROR -Message "Updating props to Sites table issue: $($_)"
         } 
     }
     catch {
@@ -280,7 +299,7 @@ Function GetSitesInDB {
 
             $SqlCmd = New-Object System.Data.SqlClient.SqlCommand
             $SqlCmd.CommandType = [System.Data.CommandType]'StoredProcedure'
-            $SqlCmd.CommandText = $StoredProcedureName
+            #$SqlCmd.CommandText = $StoredProcedureName
             $SqlCmd.Connection = $SqlConnection            
             $SqlCmd.Parameters.AddWithValue("SiteType", [string]$SitesType)
             #Based on the Status type call the stored procedure
@@ -318,6 +337,43 @@ Function GetSitesInDB {
     }
 }
 
+Function UpdateSCA {
+    param($connectionString, $siteObj, $sca,
+    [Parameter(Mandatory=$true)] [ValidateSet("Sites","PersonalSites")] $SitesType="Sites")
+   
+    #Initialize SQL Connections
+    try {
+        $SqlConnection = New-Object System.Data.SqlClient.SqlConnection
+        $SqlConnection.ConnectionString = $connectionString   
+        $SqlConnection.Open()
+        
+        try {
+            # initialize stored procedure
+            $SqlCmd = New-Object System.Data.SqlClient.SqlCommand
+            $SqlCmd.CommandType = [System.Data.CommandType]'StoredProcedure'
+            $SqlCmd.CommandText = "UpdateSCA"
+            $SqlCmd.Connection = $SqlConnection                  
+
+            $SqlCmd.Parameters.AddWithValue("SiteType", $SitesType)        
+            $SqlCmd.Parameters.AddWithValue("URL", [string]$siteObj.URL)
+            $SqlCmd.Parameters.AddWithValue("SecondarySCA", $sca)
+            $res = $SqlCmd.ExecuteNonQuery()
+        }
+        catch {            
+            LogWrite -Level ERROR "Updating SCA for the site [$($siteObj.URL)]: $($_)"
+        } 
+    }
+    catch {
+       LogWrite -Level ERROR "Error connecting to Database: $($_)"
+    }
+        
+    finally {
+        $SqlCmd.Dispose()
+        $SqlConnection.Dispose()
+        $SqlConnection.Close()
+    }        
+}
+
 #region Permanently delete sites
 Function DeleteInvalidSites {
     param($connectionString,$SyncDate)   
@@ -346,7 +402,8 @@ Function DeleteInvalidSites {
 }
 #endregion
 
-#region Change Requests
+#region Change Requests - moved to LibRequestDAO.ps1
+<#
 Function GetActiveChangeRequests {  
     Param(
         [Parameter(Mandatory=$true)]$connectionString        
@@ -430,7 +487,9 @@ Function UpdateChangeRequest {
         $SqlConnection.Dispose()
     }  
 }
+#>
 
+<#  -- moved to GraphAPILibO365GroupsDAO.ps1
 Function UpdateGroupTeamPostRename {  
     param($connectionString, $teamObj)
    
@@ -468,6 +527,7 @@ Function UpdateGroupTeamPostRename {
         $SqlConnection.Dispose()
     }  
 }
+#>
 #endregion Change Requests
 
 #region Permanently Delete Invalid PersonalSites
@@ -635,7 +695,8 @@ Function UpdateSPOSiteExtenedRecord {
         $SqlCmd.Parameters.AddWithValue("SecondarySCA", [string]$siteObj.SecondarySCA)
         $SqlCmd.Parameters.AddWithValue("WebsCount", [string]$siteObj.NumberOfSubSites)
         $SqlCmd.Parameters.AddWithValue("FilesCount", [string]$siteObj.FilesCount)
-        $SqlCmd.Parameters.AddWithValue("LastContentModifiedDate", [string]$siteObj.LastContentModifiedDate)
+        $SqlCmd.Parameters.AddWithValue("Created", [string]$siteObj.Created)
+        $SqlCmd.Parameters.AddWithValue("LastContentModifiedDate", [string]$siteObj.LastContentModifiedDate)        
         #$SqlCmd.Parameters.AddWithValue("ICName", [string]$siteObj.ICName)        
         #$SqlCmd.Parameters.AddWithValue("IsAuditEnabled", [string]$siteObj.IsAuditEnabled)
         #$SqlCmd.Parameters.AddWithValue("IsHubSite", [string]$siteObj.IsHubSite)

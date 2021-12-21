@@ -19,18 +19,18 @@
         }                
         LogWrite -Message  "Retrieving Active M365 Users completed."
     }
-    <#Invoke-GraphAPIAuthTokenCheck
+    Invoke-GraphAPIAuthTokenCheck
     if ($script:authToken) {
-        LogWrite -Message  'Retrieving Deleted O365 Groups starting...'
-        $script:o365DeletedGroupsData = $null         
-        $script:o365DeletedGroupsData = Get-NIHDeletedO365Groups -AuthToken $script:authToken
-        $script:o365DeletedGroupsData = ParseO365Groups -AuthToken $script:authToken -Groups $script:o365DeletedGroupsData        
+        LogWrite -Message  'Retrieving Deleted O365 Users starting...'
+        $script:o365DeletedUsersData = $null         
+        $script:o365DeletedUsersData = Get-NIHDeletedO365Users -AuthToken $script:authToken
+        $script:o365DeletedUsersData = ParseO365Users -Users $script:o365DeletedUsersData        
         LogWrite -Message  'Retrieving Deleted O365 Groups completed.'
     }
     $retrivalEndTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     LogWrite -Message "Retrieval O365 Groups Start Time: $($retrivalStartTime)"
     LogWrite -Message "Retrieval O365 Groups End Time: $($retrivalEndTime)"    
-    #>
+    
 }
 
 Function ParseO365Users {
@@ -45,20 +45,26 @@ Function ParseO365Users {
         $Users.ForEach( { 
                 $isLicensed = 0
                 $isDisabled = 0
+                $IsDeleted = 0
                 $assignedLicenses_ = $null
                 $assignedPlans_ = $null
-                $_.assignedPlans |  ForEach-Object {
-                    if ($_.CapabilityStatus -eq "Enabled"){                        
-                        $assignedPlans_+= "$($_.Service);"
+                if ($_.assignedPlans.length -gt 0){
+                    $_.assignedPlans |  ForEach-Object {
+                        if ($_.CapabilityStatus -eq "Enabled"){                        
+                            $assignedPlans_+= "$($_.Service);"
+                        }
                     }
-                } 
-                $licenses = $_.assignedLicenses.skuId
-                $licenses.ForEach({                     
-                     $assignedLicenses_+= $script:Licenses[$_] + ";"                  
-                })               
+                }
+                if ($_.assignedLicenses.length -gt 0){ 
+                    $licenses = $_.assignedLicenses.skuId
+                    $licenses.ForEach({                     
+                         $assignedLicenses_+= $script:Licenses[$_] + ";"                  
+                    }) 
+                }              
                 $provisionedPlans = $_.provisionedPlans
                 if ($assignedLicenses_ -ne $null) { $isLicensed = 1}
                 if ($_.accountEnabled -eq $false) { $isDisabled = 1}
+                if ($_.deletedDateTime -ne $null) { $IsDeleted = 1}
 
                 $null = $UsersList.Add([PSCustomObject]@{
                         UserId                     = $_.id
@@ -71,7 +77,7 @@ Function ParseO365Users {
                         ProxyAddresses             = $_.proxyAddresses -join ';';
                         IsDisabled                 = $isDisabled;
                         AccountEnabled             = $_.accountEnabled
-                        IsDeleted                  = 0;
+                        IsDeleted                  = $IsDeleted;
                         UserType                   = $_.userType;
                         Department                 = $_.department;
                         OfficeLocation             = $_.officeLocation;
@@ -80,7 +86,8 @@ Function ParseO365Users {
                         AssignedLicenses           = $assignedLicenses_;
                         AssignedPlans              = $assignedPlans_;
                         CreatedDateTime            = $_.createdDateTime;
-                        DeletedDateTime            = $_.deletedDateTime                        
+                        SoftDeletionTimestamp      = $_.deletedDateTime
+                        #DeletedDateTime            = $_.deletedDateTime                       
                         EmployeeId                 = $_.employeeId                        
                         JobTitle                   = $_.jobTitle;                        
                         BusinessPhones             = $_.businessPhones -join ';';                                                
@@ -110,6 +117,19 @@ Function ParseO365Users {
     return $UsersList 
 }
 
+Function CacheO365Users {
+    LogWrite -Level INFO -Message "Generating Cache files for O365 Users..."    
+    if ($script:o365UsersData -ne $null) {
+        SetDataInCache -CacheType O365 -ObjectType O365Users -ObjectState Active -CacheData $script:o365UsersData
+    }
+    if ($script:o365DeletedUsersData -ne $null) {
+        SetDataInCache -CacheType O365 -ObjectType O365Users -ObjectState InActive -CacheData $script:o365DeletedUsersData
+    }
+    LogWrite -Level INFO -Message "Generating Cache files for O365 Users completed."
+    
+}
+
+#region no longer used
 Function ParseO365Users-old {
     param(
         $usersObj,
@@ -268,18 +288,4 @@ Function GetAllO365Users {
     }
     
 }
-
-Function CacheO365Users {
-    LogWrite -Level INFO -Message "Generating Cache files for O365 Users..."    
-    if ($script:o365UsersData -ne $null) {
-        SetDataInCache -CacheType O365 -ObjectType O365Users -ObjectState Active -CacheData $script:o365UsersData
-    }
-    if ($script:o365DeletedUsersData -ne $null) {
-        SetDataInCache -CacheType O365 -ObjectType O365Users -ObjectState InActive -CacheData $script:o365DeletedUsersData
-    }
-    LogWrite -Level INFO -Message "Generating Cache files for O365 Users completed."
-    
-}
-
-
-
+#endregion

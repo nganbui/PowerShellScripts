@@ -1,7 +1,7 @@
 ﻿Function GetDataInCache {
     param(
         [Parameter(Mandatory = $true)] [ValidateSet("O365", "DB")] $CacheType, 
-        [Parameter(Mandatory = $true)] [ValidateSet("ICProfiles", "GraphAPIGroups", "GraphAPITeams", "GraphAPIChannel", "GraphAPIUsers", "SPOSites", "PersonalSites","PersonalSitesExtended", "O365Users", "Groups", "PortalAdminGroups", "SPOAdminGroups", "OneDriveAdminGroups")] $ObjectType,
+        [Parameter(Mandatory = $true)] [ValidateSet("ICProfiles", "GraphAPIGroups", "GraphAPITeams", "GraphAPIChannel", "GraphAPIUsers", "SPOSites", "PersonalSites","PersonalSitesExtended", "O365Users", "O365Guests","Groups", "PortalAdminGroups", "SPOAdminGroups", "OneDriveAdminGroups","PowerBIworkspaces")] $ObjectType,
         [ValidateSet("Active", "InActive")] $ObjectState = "Active")
     $retData = @()
     try {
@@ -27,7 +27,7 @@ Function SetDataInCache {
     param(
         [Parameter(Mandatory = $true)] $CacheData, 
         [Parameter(Mandatory = $true)] [ValidateSet("O365", "DB")] $CacheType, 
-        [Parameter(Mandatory = $true)] [ValidateSet("ICProfiles", "GraphAPIGroups", "GraphAPITeams", "GraphAPIChannel", "GraphAPIUsers", "SPOSites", "PersonalSites","PersonalSitesExtended", "O365Users", "Groups", "PortalAdminGroups", "SPOAdminGroups", "OneDriveAdminGroups")] $ObjectType,
+        [Parameter(Mandatory = $true)] [ValidateSet("ICProfiles", "GraphAPIGroups", "GraphAPITeams", "GraphAPIChannel", "GraphAPIUsers", "SPOSites", "PersonalSites","PersonalSitesExtended", "O365Users","O365Guests", "Groups", "PortalAdminGroups", "SPOAdminGroups", "OneDriveAdminGroups","PowerBIworkspaces")] $ObjectType,
         [ValidateSet("Active", "InActive", "ActiveNoAccess")] $ObjectState = "Active"
     )
 
