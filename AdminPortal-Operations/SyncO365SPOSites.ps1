@@ -66,8 +66,7 @@ Function GetSPOSitesReportContent {
 }
 
 Function GenerateSPOSitesSyncLogs {    
-    $todaysDate = Get-Date -Format "MM-dd-yyyy"
-    $logPath = "$script:LogFile\$todaysDate"
+    $logPath = "$($script:DirLog)"
     if (!(Test-Path $logPath)) { 
 	    LogWrite -Message "Creating $logPath" 
         New-Item -ItemType "directory" -Path $logPath -Force

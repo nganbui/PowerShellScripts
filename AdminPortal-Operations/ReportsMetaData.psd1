@@ -1,17 +1,15 @@
 @{ 
-    UsageReport = ( 
-         @{
-             ReportEndpoint = "getTeamsUserActivityUserDetail"
-             ReportName     = "TeamsUserActivity"
-         },
+    UsageReport = (         
+         <#
          @{
              ReportEndpoint = "getTeamsDeviceUsageUserDetail"
              ReportName     = "TeamsDeviceUsage"
-         },
+         },         
          @{
             ReportEndpoint = "getSharePointSiteUsageDetail"
             ReportName     = "SharePointSiteUsage"
         },
+        #>
         @{
             ReportEndpoint = "getSharePointActivityUserDetail"
             ReportName     = "SharePointActivity"
@@ -24,11 +22,31 @@
             ReportEndpoint = "getOneDriveActivityUserDetail"
             ReportName     = "OneDriveActivity"
         },
+        <#
+        @{
+             ReportEndpoint = "getTeamsUserActivityUserDetail"
+             ReportName     = "TeamsUserActivity"
+         },
+         #>
+        @{
+            ReportEndpoint = "getMailboxUsageDetail"
+            ReportName     = "EXOMailboxUsageActivity"
+        },
         #manually download
+        @{
+            ReportEndpoint = ""            
+            ReportName     = "TeamsDeviceUsage"
+            DropLocation = "D:\Reports\TeamsDeviceUsage.csv"            
+        },
         @{
             ReportEndpoint = ""            
             ReportName     = "TeamsUsageActivity"
             DropLocation = "D:\Reports\TeamsUsageActivity.csv"            
+        },
+        @{
+            ReportEndpoint = ""            
+            ReportName     = "SharePointSiteUsage"
+            DropLocation = "D:\Reports\SharePointSiteUsage.csv"            
         },
         @{
             ReportEndpoint = ""            
@@ -49,8 +67,17 @@
             ReportEndpoint = ""            
             ReportName     = "BoxUsage"
             DropLocation = "D:\Reports\BoxUsage.csv"
-        }
-                     
+        },
+        @{
+             ReportEndpoint = ""
+             ReportName     = "TeamsUserActivity"
+             DropLocation = "D:\Reports\TeamsUserActivity.csv"
+         },
+        @{
+            ReportEndpoint = ""            
+            ReportName     = "EXOEmailUserActivity"
+            DropLocation = "D:\Reports\EXOEmailUserActivity.csv"            
+        }                     
     )
     ReportConfig = ( 
          @{
@@ -92,20 +119,36 @@
           @{
              StoredProc = "Reports_FormsUserActivity"
              FileName   = "Reports_FormsUserActivity"
-         },
+         },   
          @{
              StoredProc = "Reports_BoxUsage"
              FileName   = "Reports_BoxUsage"
          },
          @{
-             StoredProc = "Reports_Guests"
-             FileName   = "Reports_Guests"             
+             StoredProc = "Reports_EXOMailboxUsageActivity"
+             FileName   = "Reports_EXOMailboxUsageActivity"
+         },
+ 	     @{
+             StoredProc = "Reports_EXOEmailUserActivity"
+             FileName   = "Reports_EXOEmailUserActivity"
+         },
+         @{
+             StoredProc = "Reports_RollupTeamsMeeting"
+             FileName   = "Reports_RollupTeamsMeeting"
+             Baseline   = "Yes"
          },
          @{
              StoredProc = "Reports_TeamsOnlyModeUsersByIC"
              FileName   = "Reports_TeamsOnlyMode"
              Baseline   = "Yes"
-         },
+         }
+         <#
+         ,
+         @{
+             StoredProc = "Reports_Guests"
+             FileName   = "Reports_Guests"             
+         }
+         ,
          @{
              StoredProc = "Reports_Teams"
              FileName   = "Reports_Teams"
@@ -120,11 +163,16 @@
              StoredProc = "Reports_Users"
              FileName   = "Reports_Users"
              Baseline   = "Yes"
-         },                  
+         }         
          @{
              StoredProc = "Reports_PersonalSites"
              FileName   = "Reports_PersonalSites"
              Baseline   = "Yes"
-         }           
+         },
+         @{
+             StoredProc = "Reports_GuestsNotLoggedIn"
+             FileName   = "Reports_GuestsNotLoggedIn"
+             Baseline   = "Yes"
+         } #>          
     )      
 }

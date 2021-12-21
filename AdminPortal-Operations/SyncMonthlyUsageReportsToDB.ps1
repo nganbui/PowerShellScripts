@@ -107,13 +107,16 @@ Try {
     $bc = new-object ("System.Data.SqlClient.SqlBulkCopy") $cn
     $bc.BatchSize = 50000
     $bc.BulkCopyTimeout = 0
-    #---- Usage Reports for previous month
+    #---- Usage Reports for previous month    
     $date = Get-Date
     $year = $date.Year
+    $month = $date.Month
     $month = $date.AddMonths(-1).Month
     $monthName = (Get-Culture).DateTimeFormat.GetMonthName($month)
-    #$reportFolder = "$($script:CacheDataPath)\$($usageReport)\$($monthName)"
-    $reportFolder = "$($script:CacheDataPath)\$($usageReport)\$($monthName)\$($inputReport)"
+    if (12 -eq $month){
+        $year = $date.AddYears(-1).Year
+    } 
+    $reportFolder = "$($script:CacheDataPath)\$usageReport\$year\$monthName\$inputReport"    
     $reportfiles = Get-ChildItem $reportFolder -Filter "*.csv"
     
     # create a .txt file to capture usage report have synced to DB if any

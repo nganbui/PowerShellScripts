@@ -25,15 +25,26 @@ Function SyncM365UsersDataToCache {
     Set-AzureAppVars
     Set-DataFile
 
-    LogWrite -Message "------------------------ Retrieving M365 Users ------------------------------------------"     
-    GetAllM365Users
+    LogWrite -Message "------------------------ Retrieving M365 Users ------------------------------------------" 
+    #Verify if today is Sunday => retrieve user licenses
+    $today = (Get-Date).DayOfWeek
+    if ($today -eq 'Sunday'){
+        LogWrite -Message  "Including user license info..."
+        GetAllM365Users -FullSync 
+    }
+    else{
+        GetAllM365Users    
+    }
+    LogWrite -Message "------------------------ Retrieving Guest Users ------------------------------------------"     
+    GetGuestUsers
+
     LogWrite -Message "------------------------ Caching M365 Users ---------------------------------------------"    
     CacheO365Users
 }
 
 Function GenerateDailyCacheReport {
     LogWrite -Message "Sending Email Report: [Populate M365 Users Daily Cache]"    
-    $subject = "[SPO-DevOps] Populate M365 Users Daily Cache"    
+    $subject = "[M365 DevOps] Populate M365 Users Daily Cache"    
     $body = "<p><b>Description:</b> This job will cache M365 Users Data objects locally. These cache files are used to further sync data to the Database</p>"
     $body += "<p>Script Start time: $($script:StartTimeM365UsersDailyCache)<br />"
     $body += "Script End time: $($script:EndTimeM365UsersDailyCache)<br /><br />"    
@@ -53,7 +64,7 @@ Function GenerateM365UsersDailyCacheReport {
     LogWrite -Message "->Total Deleted Users Retrieved: $($script:totalDeletedUsers)"
     $msg = ""
     $msg += "<p>Total Active Users Retrieved: $($script:totalUsers)<br />"    
-    $msg += "Total Members Retrieved: $($script:totalMembers)<br />"
+    $msg += "<p>Total Members Retrieved: $($script:totalMembers)<br />"
     $msg += "Total Guests Retrieved: $($script:totalGuests)<br />"
     $msg += "Total Others Retrieved: $($script:totalOthers)<br />"
     $msg += "Total Deleted Users Retrieved: $($script:totalDeletedUsers)</p>"
@@ -73,6 +84,7 @@ Try {
 
     $script:EndTimeM365UsersDailyCache = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     #Generate Report and send email
+    Set-EmailVars
     GenerateDailyCacheReport 
     LogWrite -Message "[Populate M365 Users Daily Cache] Start Time: $($script:StartTimeM365UsersDailyCache)"
     LogWrite -Message "[Populate M365 Users Daily Cache] End Time:   $($script:EndTimeM365UsersDailyCache)"

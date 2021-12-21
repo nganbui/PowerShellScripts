@@ -86,5 +86,6 @@ Catch [Exception] {
     LogWrite -Level ERROR "-Unexpected Error: $_ "
 }
 Finally {
+    DisconnectPnpOnlineOAuth
     LogWrite -Message  "----------------------- [Populate Sites and Personal Sites Daily Cache] Completed ------------------------"
 }

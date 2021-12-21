@@ -69,8 +69,9 @@ Function GetM365UsersReportContent {
 }
 
 Function GenerateM365UsersSyncLogs {    
-    $todaysDate = Get-Date -Format "MM-dd-yyyy"
-    $logPath = "$script:LogFile\$todaysDate"
+    #$todaysDate = Get-Date -Format "MM-dd-yyyy"
+    #$logPath = "$script:DirLog\$todaysDate"
+    $logPath = "$($script:DirLog)"
     if (!(Test-Path $logPath)) { 
 	    LogWrite -Message "Creating $logPath" 
         New-Item -ItemType "directory" -Path $logPath -Force
@@ -81,13 +82,13 @@ Function GenerateM365UsersSyncLogs {
     $usersWithSameSigninFile = "$logPath\UsersWithSameSignin.csv"
 
     LogWrite -Message "Generating Log files..." 
-    if ($script:usersData) {
+    if ($script:usersData -and $script:usersData.Count -gt 0) {
         ExportCSV -DataSet $script:usersData -FileName $usersFile
     }
-    if ($script:deletedUsersData) {
+    if ($script:deletedUsersData  -and @($script:deletedUsersData).Count -gt 0) {
         ExportCSV -DataSet $script:deletedUsersData -FileName $delUsersFile
     }
-    if ($script:usersWithSameSigninName) {
+    if ($script:usersWithSameSigninName -and $script:usersWithSameSigninName.Count -gt 0) {
         ExportCSV -DataSet $script:usersWithSameSigninName -FileName $usersWithSameSigninFile
     }
     
@@ -96,7 +97,7 @@ Function GenerateM365UsersSyncLogs {
 
 Try {
     #log file path
-    Set-LogFile -logFileName $logFileName
+    Set-LogFile -logFileName $logFileName    
     Set-DataFile
     $script:StartTimeDailyCache = Get-Date -Format "yyyy-MM-dd HH:mm:ss"           
     LogWrite -Message "----------------------- [Sync M365 Users to DB] Execution Started --------------------------"
@@ -104,22 +105,37 @@ Try {
     $script:usersData = @()
     $script:deletedUsersData = @()
     $script:usersWithSameSigninName = @()
+    $script:guestsData = @()
 
     $script:usersData = GetDataInCache -CacheType O365 -ObjectType O365Users -ObjectState Active
-    $script:deletedUsersData = GetDataInCache -CacheType O365 -ObjectType O365Users -ObjectState InActive    
+    $script:deletedUsersData = GetDataInCache -CacheType O365 -ObjectType O365Users -ObjectState InActive  
+    $script:guestsData =   GetDataInCache -CacheType O365 -ObjectType O365Guests -ObjectState Active  
 
+    #Members
     if ($script:usersData -eq $null) {
         LogWrite -Message "M365 Users data not found in cache. Processing from M365"
         #Retrieve O365 Users...
         Set-TenantVars
         Set-AzureAppVars        
         GetAllM365Users
-
         #Cache Users
         CacheO365Users
-
         $script:usersData = GetDataInCache -CacheType O365 -ObjectType O365Users -ObjectState Active
-        $script:deletedUsersData = GetDataInCache -CacheType O365 -ObjectType O365Users -ObjectState InActive
+        $script:deletedUsersData = GetDataInCache -CacheType O365 -ObjectType O365Users -ObjectState InActive         
+    }
+    else {
+        LogWrite -Message "Processing M365 Users data from cache"
+    }
+    #Guests
+    if ($script:guestsData -eq $null) {
+        LogWrite -Message "Guests data not found in cache. Processing from M365"
+        #Retrieve O365 Users...
+        Set-TenantVars
+        Set-AzureAppVars        
+        GetGuestUsers
+        #Cache Users
+        CacheO365Users
+        $script:guestsData =   GetDataInCache -CacheType O365 -ObjectType O365Guests -ObjectState Active
     }
     else {
         LogWrite -Message "Processing M365 Users data from cache"
@@ -129,6 +145,7 @@ Try {
     UpdateO365UsersToDatabase
     $script:EndTimeDailyCache = Get-Date -Format "yyyy-MM-dd HH:mm:ss"  
     #Generate Log files and send Email Report
+    Set-EmailVars
     GenerateM365UsersSyncReport
     #Generate Log files
     GenerateM365UsersSyncLogs

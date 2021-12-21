@@ -23,19 +23,18 @@ Try {
     
     LogWrite -Message "----------------------- [Populate Teams Only Mode Users Cache] Execution Started -----------------------"
     
-    #$cred = Get-Credential
-    $sfbSession = New-CsOnlineSession –OverrideAdminDomain "nih.onmicrosoft.com" #-Credential $cred
-    Import-PSSession $sfbSession -AllowClobber
-    # Teams Only users Report
-    #Name,Teams*​
-    #$users = Get-CsOnlineUser | ? {$_.TeamsUpgradeEffectiveMode -eq "TeamsOnly"} | select UserPrincipalName,FirstName,LastName,Company,Department,Office,Teams*
-
     #--Create a folder UsageReports under Data if any        
     $date = Get-Date
     $year = $date.Year
+    $month = $date.Month
     $month = $date.AddMonths(-1).Month
     $monthName = (Get-Culture).DateTimeFormat.GetMonthName($month)
-    $reportFolder = "$($script:CacheDataPath)\$($usageReport)\$($monthName)\$($inputReport)"
+    if (12 -eq $month){
+        $year = $date.AddYears(-1).Year
+    } 
+
+    #$reportFolder = "$($script:CacheDataPath)\$($usageReport)\$($monthName)\$($inputReport)"
+    $reportFolder = "$($script:CacheDataPath)\$usageReport\$year\$monthName\$inputReport"
     Create-Directory $reportFolder
 
     # create a new DateTime object set to the first day of a given month and year
@@ -43,8 +42,10 @@ Try {
     # add a month and subtract the smallest possible time unit
     $endOfMonth = ($startOfMonth).AddMonths(1).AddTicks(-1)
 
+    Connect-MicrosoftTeams
     $users = Get-CsOnlineUser | ? {$_.TeamsUpgradeEffectiveMode -eq "TeamsOnly"} | select UserPrincipalName,Teams*
     $users | Export-Csv -Path "$reportFolder\TeamsOnlyUsers.csv" -NoTypeInformation
+
     # All users report
     #$allUsers = Get-CsOnlineUser | select *
     #$allUsers | Export-Csv -Path "D:\Scripting\O365\Data\Other\AllTeamsUsers.csv" -NoTypeInformation
@@ -55,5 +56,5 @@ Catch [Exception] {
 }
 Finally {
     LogWrite -Message  "----------------------- [Populate Teams Only Mode Users Cache] Completed ------------------------"
-    Remove-PSSession -Session $sfbSession
+    Disconnect-MicrosoftTeams
 }

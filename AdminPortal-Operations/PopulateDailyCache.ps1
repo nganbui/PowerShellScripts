@@ -16,25 +16,25 @@ $logFileName = "$currentFolder\$logFileName"
 Function SyncO365DataToCache {    
     Set-TenantVars
     Set-AzureAppVars
-    Set-DataFile
-           
+    Set-DataFile 
+   <# 
     LogWrite -Message "------------------------Retrieving SPO Sites and Personal Sites------------------------"     
     GetAllSPOSites
     LogWrite -Message "------------------------Caching SPO Sites and Personal Sites---------------------------"     
     CacheSPOSites
     CachePersonalSites     
-    
-    <#LogWrite -Message "------------------------Retrieving O365 Users------------------------------------------"     
+   
+    LogWrite -Message "------------------------Retrieving O365 Users------------------------------------------"     
     GetAllM365Users
     LogWrite -Message "------------------------Caching O365 Users---------------------------------------------"    
     CacheO365Users
-    #>
-    
-    <#LogWrite -Message "------------------------Retrieving O365 Groups-----------------------------------------"    
+   #>
+   
+    LogWrite -Message "------------------------Retrieving O365 Groups-----------------------------------------"    
     GetAllO365Groups
     LogWrite -Message "------------------------Caching O365 Groups--------------------------------------------"     
     CacheO365Groups  
-    #>
+   
 }
 
 Function GenerateDailyCacheReport {

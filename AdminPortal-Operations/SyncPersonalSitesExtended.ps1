@@ -66,8 +66,7 @@ Function GetPersonalSitesReportContent {
 }
 
 Function GeneratePersonalSitesSyncLogs {    
-    $todaysDate = Get-Date -Format "MM-dd-yyyy"
-    $logPath = "$script:LogFile\$todaysDate"
+    $logPath = "$($script:DirLog)"
     if (!(Test-Path $logPath)) { 
 	    LogWrite -Message "Creating $logPath" 
         New-Item -ItemType "directory" -Path $logPath -Force
@@ -124,15 +123,13 @@ Try {
     Set-AzureAppVars
     Set-DataFile
     Set-DBVars
-
     
     GetAllPersonalSites
     #--For personal will get extended site props Weekly due to perfomance issue
     UpdateSitesProperties -SiteObjects $script:personalSitesData -SitesType PersonalSites
     #Cache All SPO Personal Sites to file system
     CachePersonalSitesExtended
-    
-    #$script:personalSitesData = GetDataInCache -CacheType O365 -ObjectType PersonalSitesExtended -ObjectState Active    
+    $script:personalSitesExtendedData = GetDataInCache -CacheType O365 -ObjectType PersonalSitesExtended -ObjectState Active       
     #Update Personal Sites to Database
     if ($null -ne $script:personalSitesExtendedData){
         $script:personalSitesExtendedData = GetDataInCache -CacheType O365 -ObjectType PersonalSitesExtended -ObjectState Active

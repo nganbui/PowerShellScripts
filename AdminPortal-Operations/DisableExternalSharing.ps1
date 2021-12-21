@@ -8,7 +8,7 @@ $logFileName = "$currentFolder\$logFileName"
 ."$script:RootDir\Common\Lib\LibCore.ps1"
 #Include dependent functionality
 ."$script:RootDir\Common\Lib\LibO365.ps1"
-."$script:RootDir\Common\Lib\LibSPOSitesDAO.ps1"
+."$script:RootDir\Common\Lib\GraphAPILibSPOSitesDAO.ps1"
 
 Function RetrieveSPOSitesWithExternalSharing {        
     try {       
@@ -121,6 +121,7 @@ Try {
     #Disable External Sharing for the sites
     Disable_ExternalSharing
 
+    Set-EmailVars
     SendEmailReport
 
 
@@ -128,4 +129,8 @@ Try {
 }
 Catch [Exception] {
     LogWrite -Level ERROR "Error in the script: $($_.Exception.Message)"
+}
+Finally {    
+    LogWrite -Level INFO -Message " Disconnect SharePoint Admin Center." 
+    DisconnectPnpOnlineOAuth -Context $script:TenantContext     
 }

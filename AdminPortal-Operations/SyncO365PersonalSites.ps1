@@ -66,8 +66,7 @@ Function GetPersonalSitesReportContent {
 }
 
 Function GeneratePersonalSitesSyncLogs {    
-    $todaysDate = Get-Date -Format "MM-dd-yyyy"
-    $logPath = "$script:LogFile\$todaysDate"
+    $logPath = "$($script:DirLog)"
     if (!(Test-Path $logPath)) { 
 	    LogWrite -Message "Creating $logPath" 
         New-Item -ItemType "directory" -Path $logPath -Force
@@ -78,14 +77,14 @@ Function GeneratePersonalSitesSyncLogs {
     $sitesFile = "$logPath\ActivePersonalSites.csv"
     $delsitesFile = "$logPath\DeletedPersonalSites.csv"    
 
-    if ($script:sitesData) {
-        ExportCSV -DataSet $script:sitesData -FileName $sitesFile
+    if ($script:personalSitesData) {
+        ExportCSV -DataSet $script:personalSitesData -FileName $sitesFile
     }
-    if ($script:deletedSitesData) {
-        ExportCSV -DataSet $script:deletedSitesData -FileName $delsitesFile
+    if ($script:deletedPersonalSitesData) {
+        ExportCSV -DataSet $script:deletedPersonalSitesData -FileName $delsitesFile
     }
     
-    LogWrite -Message "Generating Log files ended."     
+    LogWrite -Message "Generating Log files ended."    
 }
 
 Try {
