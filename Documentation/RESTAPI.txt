@@ -1,0 +1,22 @@
+$accessToken = Get-SPOAccessToken –ClientId $ClientId –ClientSecret $ClientSecret -WebUri $WebUri
+
+PnPSharePoint module was really just simplifying the access mechanics with REST API calls under the hood
+
+$WebUri = "{yourSharePointSiteURl}"
+accessToken = Get-SPOAccessToken –ClientId $ClientId –ClientSecret $ClientSecret -WebUri $WebUri
+$endpointUri = "$WebUri/_api/web/GetFileByServerRelativeUrl('/Shared Documents/General/Document Request Repository/Document Request List Tracker.xlsx')/CheckOut()"
+$data = Invoke-SPORestMethod -Uri $endpointUri -AccessToken $accessToken
+
+Use below managed C# code to connect to SharePoint 
+using OfficeDevPnP.Core;
+using Microsoft.SharePoint;
+using Microsoft.SharePoint.Client;
+
+string siteUrl = "{yourSharePointSiteURl}";  
+using (var cc = new AuthenticationManager().GetAppOnlyAuthenticatedContext(siteUrl, "[Your Client ID]", "[Your Client Secret]"))  
+{  
+    cc.Load(cc.Web, p => p.Title);  
+    cc.ExecuteQuery();  
+    Console.WriteLine(cc.Web.Title);  
+};  
+
