@@ -1,1 +1,0 @@
-﻿.\Create-SelfSignedCertificate.ps1 -CommonName "SPO-ExchangeOnlinePowerShellV2" -StartDate 2020-09-21 -EndDate 2022-09-21
