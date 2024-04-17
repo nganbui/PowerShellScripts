@@ -1,5 +1,0 @@
-http://www.artisconsulting.com/geetha-sivasailam/2018/11/13/role-based-security-in-powerapps-using-sharepointnbspgroups
-https://svaghub.wordpress.com/2018/11/18/fancy-functional-multi-step-form-indicators-and-breadcrumbs-in-powerapps-part-2/
-https://wonderlaura.com/2019/04/03/powerapps-with-sharepoint-permissions/
-
-https://graph.microsoft.com/v1.0/sites/nih.sharepoint.com:/sites/CIT-PowerAppsPOC
